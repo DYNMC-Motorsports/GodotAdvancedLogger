@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://bxalyqjk1k6yr"]
+
+[ext_resource type="Script" uid="uid://sqckcf0oc0w" path="res://addons/godot_advanced_logger/examples/combat/CombatExampleScene.cs" id="1_8f3gs"]
+
+[node name="CombatExampleScene" type="Node"]
+script = ExtResource("1_8f3gs")
