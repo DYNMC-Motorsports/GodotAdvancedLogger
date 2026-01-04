@@ -8,7 +8,12 @@ public partial class LogManager : Node
         public static LogManager Instance { get; private set; }
 
         private readonly List<ILogWriter> _writers = new();
-        private readonly HashSet<string> _mutedChannels = new();
+        private readonly HashSet<string> _mutedChannels = new(StringComparer.OrdinalIgnoreCase);
+        
+        private LogLevel _minLogLevel = LogLevel.Info;
+        
+        private const string SettingMutedChannels = "addons/godot_advanced_logger/settings/muted_channels";
+        private const string SettingLogLevel = "addons/godot_advanced_logger/settings/min_log_level";
 
         // Configuration: Global Enable/Disable
         public bool IsGlobalEnabled { get; set; } = true;
@@ -24,6 +29,40 @@ public partial class LogManager : Node
             
             AddWriter(new ConsoleWriter());
             AddWriter(new FileWriter());
+            
+            LoadSettings();
+        }
+        
+        private void LoadSettings()
+        {
+            // Load Muted Channels
+            if (ProjectSettings.HasSetting(SettingMutedChannels))
+            {
+                string rawString = ProjectSettings.GetSetting(SettingMutedChannels).AsString();
+                if (!string.IsNullOrWhiteSpace(rawString))
+                {
+                    // Split by comma, trim whitespace
+                    var channels = rawString.Split(',');
+                    foreach (var channel in channels)
+                    {
+                        MuteChannel(channel.Trim());
+                    }
+                
+                    // Log strictly to console (bootstrap log) to verify it works
+                    GD.Print($"[LogManager] Loaded muted channels: {string.Join(", ", _mutedChannels)}");
+                }
+            }
+
+            // Load Minimum Log Level
+            if (ProjectSettings.HasSetting(SettingLogLevel))
+            {
+                int levelInt = ProjectSettings.GetSetting(SettingLogLevel).AsInt32();
+                // Cast int to Enum safely
+                if (Enum.IsDefined(typeof(LogLevel), levelInt))
+                {
+                    _minLogLevel = (LogLevel)levelInt;
+                }
+            }
         }
 
         public override void _ExitTree()
@@ -88,6 +127,8 @@ public partial class LogManager : Node
         public static void Log(LogLevel level, string channel, string message, Exception? ex = null)
         {
             if (Instance == null || !Instance.IsGlobalEnabled) return;
+            
+            if (level < Instance._minLogLevel) return;
 
             // Check if channel is muted
             if (Instance._mutedChannels.Contains(channel)) return;
