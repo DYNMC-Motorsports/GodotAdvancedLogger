@@ -8,14 +8,19 @@
 
 config_version=5
 
+[animation]
+
+compatibility/default_parent_skeleton_in_mesh_instance_3d=true
+
 [application]
 
 config/name="GodotAdvancedLogger"
-config/features=PackedStringArray("4.5", "C#", "Forward Plus")
+run/main_scene="uid://bxalyqjk1k6yr"
+config/features=PackedStringArray("4.6", "C#", "Forward Plus")
 
 [autoload]
 
-LogManager="*res://addons/godot_advanced_logger/core/LogManager.cs"
+LogManager="*uid://bmcwf1i6688si"
 
 [dotnet]
 
