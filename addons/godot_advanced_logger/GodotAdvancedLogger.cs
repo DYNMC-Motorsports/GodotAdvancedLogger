@@ -1,6 +1,5 @@
 #if TOOLS
 using Godot;
-using System;
 
 [Tool]
 public partial class GodotAdvancedLogger : EditorPlugin
@@ -21,7 +20,7 @@ public partial class GodotAdvancedLogger : EditorPlugin
 		AddAutoloadSingleton(AutoloadName, AutoloadPath);
 		
 		AddCustomProjectSetting(SettingMutedChannels, "", Variant.Type.String, PropertyHint.None, "Comma separated list (e.g. Physics, AI)");
-		AddCustomProjectSetting(SettingLogLevel, 0, Variant.Type.Int, PropertyHint.Enum, "Info,Warning,Error,Debug");
+		AddCustomProjectSetting(SettingLogLevel, 0, Variant.Type.Int, PropertyHint.Enum, "Debug,Info,Warning,Error");
 		
 		ProjectSettings.Save();
         
@@ -43,8 +42,7 @@ public partial class GodotAdvancedLogger : EditorPlugin
 		{
 			ProjectSettings.SetSetting(name, defaultValue);
 		}
-
-		// We must set the property info every time the plugin loads to ensure the Editor UI knows how to display it.
+		
 		var propertyInfo = new Godot.Collections.Dictionary
 		{
 			{ "name", name },

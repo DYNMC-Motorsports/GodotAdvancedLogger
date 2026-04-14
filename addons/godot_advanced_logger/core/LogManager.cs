@@ -3,152 +3,103 @@ using System;
 using System.Collections.Generic;
 
 public partial class LogManager : Node
+{
+    public static LogManager Instance { get; private set; }
+
+    private readonly List<ILogWriter> _writers = new();
+    private readonly HashSet<string> _mutedChannels = new(StringComparer.OrdinalIgnoreCase);
+    
+    private LogLevel _minLogLevel = LogLevel.Info;
+    
+    private const string SettingMutedChannels = "addons/godot_advanced_logger/settings/muted_channels";
+    private const string SettingLogLevel = "addons/godot_advanced_logger/settings/min_log_level";
+
+    public bool IsGlobalEnabled { get; set; } = true;
+
+    public override void _EnterTree()
     {
-        // Singleton Instance
-        public static LogManager Instance { get; private set; }
-
-        private readonly List<ILogWriter> _writers = new();
-        private readonly HashSet<string> _mutedChannels = new(StringComparer.OrdinalIgnoreCase);
-        
-        private LogLevel _minLogLevel = LogLevel.Info;
-        
-        private const string SettingMutedChannels = "addons/godot_advanced_logger/settings/muted_channels";
-        private const string SettingLogLevel = "addons/godot_advanced_logger/settings/min_log_level";
-
-        // Configuration: Global Enable/Disable
-        public bool IsGlobalEnabled { get; set; } = true;
-
-        public override void _EnterTree()
+        if (Instance != null)
         {
-            if (Instance != null)
-            {
-                QueueFree();
-                return;
-            }
-            Instance = this;
-            
-            AddWriter(new ConsoleWriter());
-            AddWriter(new FileWriter());
-            
-            LoadSettings();
+            QueueFree();
+            return;
         }
+        Instance = this;
         
-        private void LoadSettings()
+        AddWriter(new ConsoleWriter());
+        AddWriter(new FileWriter());
+        
+        LoadSettings();
+    }
+    
+    private void LoadSettings()
+    {
+        if (ProjectSettings.HasSetting(SettingMutedChannels))
         {
-            // Load Muted Channels
-            if (ProjectSettings.HasSetting(SettingMutedChannels))
+            string rawString = ProjectSettings.GetSetting(SettingMutedChannels).AsString();
+            if (!string.IsNullOrWhiteSpace(rawString))
             {
-                string rawString = ProjectSettings.GetSetting(SettingMutedChannels).AsString();
-                if (!string.IsNullOrWhiteSpace(rawString))
+                var channels = rawString.Split(',');
+                foreach (var channel in channels)
                 {
-                    // Split by comma, trim whitespace
-                    var channels = rawString.Split(',');
-                    foreach (var channel in channels)
-                    {
-                        MuteChannel(channel.Trim());
-                    }
-                
-                    // Log strictly to console (bootstrap log) to verify it works
-                    GD.Print($"[LogManager] Loaded muted channels: {string.Join(", ", _mutedChannels)}");
+                    MuteChannel(channel.Trim());
                 }
+                GD.Print($"[LogManager] Loaded muted channels: {string.Join(", ", _mutedChannels)}");
             }
+        }
 
-            // Load Minimum Log Level
-            if (ProjectSettings.HasSetting(SettingLogLevel))
+        if (ProjectSettings.HasSetting(SettingLogLevel))
+        {
+            int levelInt = ProjectSettings.GetSetting(SettingLogLevel).AsInt32();
+            if (Enum.IsDefined(typeof(LogLevel), levelInt))
             {
-                int levelInt = ProjectSettings.GetSetting(SettingLogLevel).AsInt32();
-                // Cast int to Enum safely
-                if (Enum.IsDefined(typeof(LogLevel), levelInt))
-                {
-                    _minLogLevel = (LogLevel)levelInt;
-                }
+                _minLogLevel = (LogLevel)levelInt;
             }
         }
+    }
 
-        public override void _ExitTree()
-        {
-            Shutdown();
-        }
+    public override void _ExitTree()
+    {
+        Shutdown();
+    }
 
-        /// <summary>
-        /// Registers a new writer (Console, File, or Custom).
-        /// </summary>
-        public void AddWriter(ILogWriter writer)
-        {
-            writer.Initialize();
-            _writers.Add(writer);
-        }
+    public void AddWriter(ILogWriter writer)
+    {
+        writer.Initialize();
+        _writers.Add(writer);
+    }
 
-        /// <summary>
-        /// Mutes a specific channel (e.g., "PHYSICS").
-        /// </summary>
-        public void MuteChannel(string channel) => _mutedChannels.Add(channel);
-
-        /// <summary>
-        /// Unmutes a specific channel.
-        /// </summary>
-        public void UnmuteChannel(string channel) => _mutedChannels.Remove(channel);
+    public void MuteChannel(string channel) => _mutedChannels.Add(channel);
+    public void UnmuteChannel(string channel) => _mutedChannels.Remove(channel);
+    
+    public static bool IsLevelEnabled(LogLevel level, string channel)
+    {
+        if (Instance == null || !Instance.IsGlobalEnabled) return false;
+        if (level < Instance._minLogLevel) return false;
+        if (Instance._mutedChannels.Contains(channel)) return false;
         
-        /// <summary>
-        /// Logs a simple info message.
-        /// </summary>
-        public static void Info(string channel, string message)
+        return true;
+    }
+
+    #nullable enable
+    public static void Log(LogLevel level, string channel, string message, Dictionary<string, object>? context = null, Exception? ex = null)
+    {
+        if (!IsLevelEnabled(level, channel)) return;
+
+        var entry = new LogEntry(DateTime.Now, level, channel, message, context, ex);
+
+        foreach (var writer in Instance._writers)
         {
-            Log(LogLevel.Info, channel, message);
+            writer.Write(in entry);
         }
+    }
+    #nullable restore
 
-        /// <summary>
-        /// Logs a warning message.
-        /// </summary>
-        public static void Warning(string channel, string message)
+    private void Shutdown()
+    {
+        foreach (var writer in _writers)
         {
-            Log(LogLevel.Warning, channel, message);
+            writer.Shutdown();
         }
-
-        /// <summary>
-        /// Logs and error message, optionally with an exception.
-        /// </summary>
-        #nullable enable
-        public static void Error(string channel, string message, Exception? ex = null)
-        {
-            Log(LogLevel.Error, channel, message, ex);
-        }
-        #nullable restore
-        
-        public static void Debug(string channel, string message)
-        {
-            Log(LogLevel.Debug, channel, message);
-        }
-
-        /// <summary>
-        /// Main logging method.
-        /// </summary>
-        #nullable enable
-        public static void Log(LogLevel level, string channel, string message, Exception? ex = null)
-        {
-            if (Instance == null || !Instance.IsGlobalEnabled) return;
-            
-            if (level < Instance._minLogLevel) return;
-
-            // Check if channel is muted
-            if (Instance._mutedChannels.Contains(channel)) return;
-
-            var entry = new LogEntry(DateTime.Now, level, channel, message, ex);
-
-            // Distribute to all writers
-            foreach (var writer in Instance._writers)
-            {
-                writer.Write(entry);
-            }
-        }
-        #nullable restore
-
-        private void Shutdown()
-        {
-            foreach (var writer in _writers)
-            {
-                writer.Shutdown();
-            }
-            _writers.Clear(); 
-        }
+        _writers.Clear(); 
+    }
 }

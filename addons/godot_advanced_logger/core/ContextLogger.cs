@@ -1,17 +1,21 @@
-using Godot;
 using System;
+using System.Collections.Generic;
 
-public class ContextLogger
+public class ContextLogger(string channelName)
 {
-    public string ChannelName { get; private set; }
-
-    public ContextLogger(string channelName)
-    {
-        ChannelName = channelName;
-    }
+    public string ChannelName { get; private set; } = channelName;
     
-    public void Info(string message) => LogManager.Info(ChannelName, message);
-    public void Warning(string message) => LogManager.Warning(ChannelName, message);
-    public void Error(string message, Exception ex = null) => LogManager.Error(ChannelName, message, ex);
-    public void Debug(string message) => LogManager.Debug(ChannelName, message);
+    public bool IsEnabled(LogLevel level) => LogManager.IsLevelEnabled(level, ChannelName);
+
+    public void Info(string message, Dictionary<string, object> context = null) 
+        => LogManager.Log(LogLevel.Info, ChannelName, message, context);
+        
+    public void Warning(string message, Dictionary<string, object> context = null) 
+        => LogManager.Log(LogLevel.Warning, ChannelName, message, context);
+        
+    public void Error(string message, Exception ex = null, Dictionary<string, object> context = null) 
+        => LogManager.Log(LogLevel.Error, ChannelName, message, context, ex);
+        
+    public void Debug(string message, Dictionary<string, object> context = null) 
+        => LogManager.Log(LogLevel.Debug, ChannelName, message, context);
 }

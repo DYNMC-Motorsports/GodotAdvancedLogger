@@ -1,12 +1,13 @@
-using Godot;
 using System;
+using System.Collections.Generic;
 
-public record LogEntry(
+public readonly record struct LogEntry(
     DateTime Timestamp,
     LogLevel Level,
     string Channel,
     string Message,
-    #nullable enable
+#nullable enable
+    Dictionary<string, object>? ContextData = null,
     Exception? Exception = null
-    #nullable restore
+#nullable restore
 );
