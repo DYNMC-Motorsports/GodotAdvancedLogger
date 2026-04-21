@@ -1,15 +1,18 @@
 using Godot;
 using System;
 using System.Collections.Generic;
+using Pitwall.addons.godot_advanced_logger.writers;
 
 public partial class LogManager : Node
 {
+    public static readonly string SessionId = Guid.NewGuid().ToString("N")[..8];
+    
     public static LogManager Instance { get; private set; }
 
     private readonly List<ILogWriter> _writers = new();
     private readonly HashSet<string> _mutedChannels = new(StringComparer.OrdinalIgnoreCase);
-    
-    private LogLevel _minLogLevel = LogLevel.Info;
+
+    private LogLevel _minLogLevel = LogLevel.Debug;
     
     private const string SettingMutedChannels = "addons/godot_advanced_logger/settings/muted_channels";
     private const string SettingLogLevel = "addons/godot_advanced_logger/settings/min_log_level";
@@ -25,10 +28,42 @@ public partial class LogManager : Node
         }
         Instance = this;
         
-        AddWriter(new ConsoleWriter());
-        AddWriter(new FileWriter());
-        
         LoadSettings();
+        InitializeWriters();
+    }
+
+    private void InitializeWriters()
+    {
+        bool GetBoolSetting(string path, bool def) => 
+            ProjectSettings.HasSetting(path) ? ProjectSettings.GetSetting(path).AsBool() : def;
+        
+        if (GetBoolSetting("addons/godot_advanced_logger/writers/enable_console", true))
+        {
+            AddWriter(new ConsoleWriter());
+        }
+        
+        if (GetBoolSetting("addons/godot_advanced_logger/writers/enable_file", false))
+        {
+            AddWriter(new FileWriter());
+        }
+        
+        if (GetBoolSetting("addons/godot_advanced_logger/writers/enable_json", false))
+        {
+            AddWriter(new JsonFileWriter());
+        }
+        
+        if (GetBoolSetting("addons/godot_advanced_logger/writers/enable_seq", false))
+        {
+            string seqUrl = ProjectSettings.HasSetting("addons/godot_advanced_logger/seq/server_url") 
+                ? ProjectSettings.GetSetting("addons/godot_advanced_logger/seq/server_url").AsString() 
+                : "http://localhost:5341";
+                
+            string seqKey = ProjectSettings.HasSetting("addons/godot_advanced_logger/seq/api_key") 
+                ? ProjectSettings.GetSetting("addons/godot_advanced_logger/seq/api_key").AsString() 
+                : null;
+
+            AddWriter(new SeqHttpWriter(seqUrl, seqKey));
+        }
     }
     
     private void LoadSettings()
