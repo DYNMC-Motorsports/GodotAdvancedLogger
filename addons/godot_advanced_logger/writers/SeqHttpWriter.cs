@@ -8,19 +8,19 @@ using System.Threading;
 using System.Threading.Tasks;
 using Godot;
 
-namespace Pitwall.addons.godot_advanced_logger.writers;
+namespace GodotAdvancedLogger.addons.godot_advanced_logger.writers;
 
 public class SeqHttpWriter : ILogWriter
 {
     private readonly string _serverUrl;
     private readonly string _apiKey;
     
-    private readonly ConcurrentQueue<LogEntry> _logQueue = new();
+    private readonly ConcurrentQueue<core.LogEntry> _logQueue = new();
     private CancellationTokenSource _cts;
     private Task _loggingTask;
-    private static readonly System.Net.Http.HttpClient _httpClient = new();
+    private static readonly System.Net.Http.HttpClient HttpClient = new();
     
-    private static readonly JsonSerializerOptions _jsonOptions = new()
+    private static readonly JsonSerializerOptions JsonOptions = new()
     {
         //PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
@@ -43,7 +43,7 @@ public class SeqHttpWriter : ILogWriter
         _loggingTask = Task.Run(ProcessQueue, _cts.Token);
     }
 
-    public void Write(in LogEntry entry)
+    public void Write(in core.LogEntry entry)
     {
         _logQueue.Enqueue(entry);
     }
@@ -52,7 +52,7 @@ public class SeqHttpWriter : ILogWriter
     {
         while (!_cts.Token.IsCancellationRequested)
         {
-            var batch = new List<LogEntry>();
+            var batch = new List<core.LogEntry>();
             
             while (batch.Count < 50 && _logQueue.TryDequeue(out var entry))
             {
@@ -70,7 +70,7 @@ public class SeqHttpWriter : ILogWriter
         }
     }
 
-    private async Task SendBatchAsync(List<LogEntry> batch)
+    private async Task SendBatchAsync(List<core.LogEntry> batch)
     {
         try
         {
@@ -83,16 +83,16 @@ public class SeqHttpWriter : ILogWriter
             {
                 string seqLevel = entry.Level switch
                 {
-                    LogLevel.Info => "Information",
-                    LogLevel.Warning => "Warning",
-                    LogLevel.Error => "Error",
-                    LogLevel.Debug => "Debug",
+                    core.LogLevel.Info => "Information",
+                    core.LogLevel.Warning => "Warning",
+                    core.LogLevel.Error => "Error",
+                    core.LogLevel.Debug => "Debug",
                     _ => "Information"
                 };
                 
                 var properties = new Dictionary<string, object>
                 {
-                    { "SessionId", LogManager.SessionId },
+                    { "SessionId", core.LogManager.SessionId },
                     { "GameVersion", ProjectSettings.GetSetting("application/config/version") },
                     { "Channel", entry.Channel }
                 };
@@ -116,7 +116,7 @@ public class SeqHttpWriter : ILogWriter
                 });
             }
 
-            string json = JsonSerializer.Serialize(payload, _jsonOptions);
+            string json = JsonSerializer.Serialize(payload, JsonOptions);
             var content = new StringContent(json, Encoding.UTF8, "application/json");
 
             if (!string.IsNullOrEmpty(_apiKey))
@@ -125,7 +125,7 @@ public class SeqHttpWriter : ILogWriter
             }
 
             // Der Endpunkt für raw JSON in Seq
-            var response = await _httpClient.PostAsync($"{_serverUrl}/api/events/raw", content, _cts.Token);
+            var response = await HttpClient.PostAsync($"{_serverUrl}/api/events/raw", content, _cts.Token);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -147,7 +147,7 @@ public class SeqHttpWriter : ILogWriter
         try { _loggingTask?.Wait(1000); } catch { }
 
         // Restliche Logs flushen
-        var finalBatch = new List<LogEntry>();
+        var finalBatch = new List<core.LogEntry>();
         while (_logQueue.TryDequeue(out var entry))
         {
             finalBatch.Add(entry);

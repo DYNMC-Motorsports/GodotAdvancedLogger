@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 
+namespace GodotAdvancedLogger.addons.godot_advanced_logger.core;
+
 public readonly record struct LogEntry(
     DateTime Timestamp,
     LogLevel Level,

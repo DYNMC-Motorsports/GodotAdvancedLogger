@@ -1,7 +1,8 @@
-using Godot;
 using System;
 using System.Collections.Generic;
-using Pitwall.addons.godot_advanced_logger.writers;
+using Godot;
+
+namespace GodotAdvancedLogger.addons.godot_advanced_logger.core;
 
 public partial class LogManager : Node
 {
@@ -9,7 +10,7 @@ public partial class LogManager : Node
     
     public static LogManager Instance { get; private set; }
 
-    private readonly List<ILogWriter> _writers = new();
+    private readonly List<writers.ILogWriter> _writers = new();
     private readonly HashSet<string> _mutedChannels = new(StringComparer.OrdinalIgnoreCase);
 
     private LogLevel _minLogLevel = LogLevel.Debug;
@@ -39,17 +40,17 @@ public partial class LogManager : Node
         
         if (GetBoolSetting("addons/godot_advanced_logger/writers/enable_console", true))
         {
-            AddWriter(new ConsoleWriter());
+            AddWriter(new writers.ConsoleWriter());
         }
         
         if (GetBoolSetting("addons/godot_advanced_logger/writers/enable_file", false))
         {
-            AddWriter(new FileWriter());
+            AddWriter(new writers.FileWriter());
         }
         
         if (GetBoolSetting("addons/godot_advanced_logger/writers/enable_json", false))
         {
-            AddWriter(new JsonFileWriter());
+            AddWriter(new writers.JsonFileWriter());
         }
         
         if (GetBoolSetting("addons/godot_advanced_logger/writers/enable_seq", false))
@@ -62,7 +63,7 @@ public partial class LogManager : Node
                 ? ProjectSettings.GetSetting("addons/godot_advanced_logger/seq/api_key").AsString() 
                 : null;
 
-            AddWriter(new SeqHttpWriter(seqUrl, seqKey));
+            AddWriter(new writers.SeqHttpWriter(seqUrl, seqKey));
         }
     }
     
@@ -97,7 +98,7 @@ public partial class LogManager : Node
         Shutdown();
     }
 
-    public void AddWriter(ILogWriter writer)
+    public void AddWriter(writers.ILogWriter writer)
     {
         writer.Initialize();
         _writers.Add(writer);
@@ -115,7 +116,7 @@ public partial class LogManager : Node
         return true;
     }
 
-    #nullable enable
+#nullable enable
     public static void Log(LogLevel level, string channel, string message, Dictionary<string, object>? context = null, Exception? ex = null)
     {
         if (!IsLevelEnabled(level, channel)) return;
@@ -127,7 +128,7 @@ public partial class LogManager : Node
             writer.Write(in entry);
         }
     }
-    #nullable restore
+#nullable restore
 
     private void Shutdown()
     {

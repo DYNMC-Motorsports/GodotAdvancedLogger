@@ -7,17 +7,19 @@ using System.Threading;
 using System.Threading.Tasks;
 using Godot;
 
+namespace GodotAdvancedLogger.addons.godot_advanced_logger.writers;
+
 public class JsonFileWriter : ILogWriter
 {
     private readonly string _logDirectory;
     private string _currentFilePath;
     private StreamWriter _writer;
     
-    private readonly ConcurrentQueue<LogEntry> _logQueue = new();
+    private readonly ConcurrentQueue<core.LogEntry> _logQueue = new();
     private CancellationTokenSource _cts;
     private Task _loggingTask;
     
-    private static readonly JsonSerializerOptions _jsonOptions = new()
+    private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = false,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
@@ -50,7 +52,7 @@ public class JsonFileWriter : ILogWriter
         }
     }
 
-    public void Write(in LogEntry entry)
+    public void Write(in core.LogEntry entry)
     {
         _logQueue.Enqueue(entry);
     }
@@ -60,7 +62,7 @@ public class JsonFileWriter : ILogWriter
         while (!_cts.Token.IsCancellationRequested)
         {
             bool wroteAny = false;
-            while (_logQueue.TryDequeue(out LogEntry entry))
+            while (_logQueue.TryDequeue(out core.LogEntry entry))
             {
                 await WriteLineAsync(entry);
                 wroteAny = true;
@@ -73,13 +75,13 @@ public class JsonFileWriter : ILogWriter
         }
     }
 
-    private async Task WriteLineAsync(LogEntry entry)
+    private async Task WriteLineAsync(core.LogEntry entry)
     {
         if (_writer == null) return;
         
         var logData = new
         {
-            SessionId = LogManager.SessionId,
+            SessionId = core.LogManager.SessionId,
             Timestamp = entry.Timestamp.ToString("O"),
             Level = entry.Level.ToString(),
             Channel = entry.Channel,
@@ -90,7 +92,7 @@ public class JsonFileWriter : ILogWriter
 
         try
         {
-            string jsonLine = JsonSerializer.Serialize(logData, _jsonOptions);
+            string jsonLine = JsonSerializer.Serialize(logData, JsonOptions);
             await _writer.WriteLineAsync(jsonLine);
         }
         catch (Exception e)
@@ -104,7 +106,7 @@ public class JsonFileWriter : ILogWriter
         _cts?.Cancel();
         try { _loggingTask?.Wait(500); } catch { }
         
-        while (_logQueue.TryDequeue(out LogEntry entry))
+        while (_logQueue.TryDequeue(out core.LogEntry entry))
         {
             WriteLineAsync(entry).Wait();
         }

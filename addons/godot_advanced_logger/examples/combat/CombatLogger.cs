@@ -1,12 +1,14 @@
 using System.Collections.Generic;
 
-public class CombatLogger : ContextLogger
+namespace GodotAdvancedLogger.addons.godot_advanced_logger.examples.combat;
+
+public class CombatLogger : core.ContextLogger
 {
     public CombatLogger() : base("Combat") { }
 
     public void LogAttack(string attacker, string target, int damage, bool isCritical = false)
     {
-        LogLevel level = isCritical ? LogLevel.Warning : (damage == 0 ? LogLevel.Debug : LogLevel.Info);
+        core.LogLevel level = isCritical ? core.LogLevel.Warning : (damage == 0 ? core.LogLevel.Debug : core.LogLevel.Info);
         
         if (!IsEnabled(level)) return;
         
@@ -34,7 +36,7 @@ public class CombatLogger : ContextLogger
 
     public void LogHeal(string healer, string target, int amount)
     {
-        if (!IsEnabled(LogLevel.Info)) return;
+        if (!IsEnabled(core.LogLevel.Info)) return;
 
         Info($"{healer} heals {target} for {amount} HP.", new Dictionary<string, object>
         {

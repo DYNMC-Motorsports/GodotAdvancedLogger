@@ -1,13 +1,15 @@
-using Godot;
-using System.Text;
 using System.Linq;
+using System.Text;
+using Godot;
+
+namespace GodotAdvancedLogger.addons.godot_advanced_logger.writers;
 
 public class ConsoleWriter : ILogWriter
 {
     public void Initialize() { }
     public void Shutdown() { }
 
-    public void Write(in LogEntry entry)
+    public void Write(in core.LogEntry entry)
     {
         string color = GetColor(entry.Level);
         string time = entry.Timestamp.ToString("HH:mm:ss");
@@ -30,14 +32,14 @@ public class ConsoleWriter : ILogWriter
         GD.PrintRich(sb.ToString());
     }
 
-    private string GetColor(LogLevel level)
+    private string GetColor(core.LogLevel level)
     {
         return level switch
         {
-            LogLevel.Info => "green",
-            LogLevel.Warning => "yellow",
-            LogLevel.Error => "red",
-            LogLevel.Debug => "cyan",
+            core.LogLevel.Info => "green",
+            core.LogLevel.Warning => "yellow",
+            core.LogLevel.Error => "red",
+            core.LogLevel.Debug => "cyan",
             _ => "white"
         };
     }

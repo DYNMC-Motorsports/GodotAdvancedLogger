@@ -1,4 +1,3 @@
-using Godot;
 using System;
 using System.Collections.Concurrent;
 using System.IO;
@@ -7,6 +6,9 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Godot;
+
+namespace GodotAdvancedLogger.addons.godot_advanced_logger.writers;
 
 public class FileWriter : ILogWriter
 {
@@ -14,7 +16,7 @@ public class FileWriter : ILogWriter
     private string _currentFilePath;
     private StreamWriter _writer;
     
-    private readonly ConcurrentQueue<LogEntry> _logQueue = new();
+    private readonly ConcurrentQueue<core.LogEntry> _logQueue = new();
     
     private CancellationTokenSource _cts;
     private Task _loggingTask;
@@ -48,7 +50,7 @@ public class FileWriter : ILogWriter
         }
     }
 
-    public void Write(in LogEntry entry)
+    public void Write(in core.LogEntry entry)
     {
         // Da ConcurrentQueue structs By-Value nimmt, wird hier eine Kopie auf den Heap/Queue gelegt.
         // Das ist für das asynchrone Schreiben notwendig und völlig in Ordnung.
@@ -61,7 +63,7 @@ public class FileWriter : ILogWriter
         {
             bool wroteAny = false;
             
-            while (_logQueue.TryDequeue(out LogEntry entry))
+            while (_logQueue.TryDequeue(out core.LogEntry entry))
             {
                 await WriteToFileAsync(entry);
                 wroteAny = true;
@@ -76,31 +78,31 @@ public class FileWriter : ILogWriter
         }
     }
 
-    private async Task WriteToFileAsync(LogEntry entry)
+    private async Task WriteToFileAsync(core.LogEntry entry)
     {
-         if (_writer == null) return;
+        if (_writer == null) return;
 
-         var sb = new StringBuilder();
-         sb.Append(entry.Timestamp.ToString("yyyy-MM-dd HH:mm:ss.fff"));
-         sb.Append('\t').Append(entry.Level.ToString().ToUpper());
-         sb.Append('\t').Append(entry.Channel);
-         sb.Append('\t').Append(entry.Message);
+        var sb = new StringBuilder();
+        sb.Append(entry.Timestamp.ToString("yyyy-MM-dd HH:mm:ss.fff"));
+        sb.Append('\t').Append(entry.Level.ToString().ToUpper());
+        sb.Append('\t').Append(entry.Channel);
+        sb.Append('\t').Append(entry.Message);
          
-         if (entry.ContextData != null && entry.ContextData.Count > 0)
-         {
-             try 
-             {
-                 sb.Append('\t').Append(JsonSerializer.Serialize(entry.ContextData));
-             } 
-             catch { /* Ignore */ }
-         }
+        if (entry.ContextData != null && entry.ContextData.Count > 0)
+        {
+            try 
+            {
+                sb.Append('\t').Append(JsonSerializer.Serialize(entry.ContextData));
+            } 
+            catch { /* Ignore */ }
+        }
 
-         if (entry.Exception != null)
-         {
-             sb.AppendLine().Append(entry.Exception.ToString());
-         }
+        if (entry.Exception != null)
+        {
+            sb.AppendLine().Append(entry.Exception.ToString());
+        }
 
-         await _writer.WriteLineAsync(sb.ToString());
+        await _writer.WriteLineAsync(sb.ToString());
     }
 
     private void CleanupOldLogs()
@@ -109,8 +111,8 @@ public class FileWriter : ILogWriter
         {
             var info = new DirectoryInfo(_logDirectory);
             var files = info.GetFiles("log_*.txt")
-                            .OrderByDescending(f => f.CreationTime)
-                            .ToList();
+                .OrderByDescending(f => f.CreationTime)
+                .ToList();
 
             if (files.Count > 50)
             {
@@ -129,7 +131,7 @@ public class FileWriter : ILogWriter
         
         try { _loggingTask?.Wait(1000); } catch { }
 
-        while (_logQueue.TryDequeue(out LogEntry entry))
+        while (_logQueue.TryDequeue(out core.LogEntry entry))
         {
             _writer?.WriteLine($"[SHUTDOWN FLUSH] {entry.Message}");
         }

@@ -1,5 +1,4 @@
-using Godot;
-using System;
+namespace GodotAdvancedLogger.addons.godot_advanced_logger.core;
 
 public enum LogLevel
 {

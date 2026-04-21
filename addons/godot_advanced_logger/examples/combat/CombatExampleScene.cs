@@ -1,10 +1,12 @@
-using Godot;
 using System.Collections.Generic;
+using Godot;
+
+namespace GodotAdvancedLogger.addons.godot_advanced_logger.examples.combat;
 
 public partial class CombatExampleScene : Node
 {
     private readonly CombatLogger _combatLog = new CombatLogger();
-    private readonly ContextLogger _uiLog = new ContextLogger("UI");
+    private readonly core.ContextLogger _uiLog = new core.ContextLogger("UI");
 
     public override void _Ready()
     {

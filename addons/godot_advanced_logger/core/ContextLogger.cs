@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 
+namespace GodotAdvancedLogger.addons.godot_advanced_logger.core;
+
 public class ContextLogger(string channelName)
 {
     public string ChannelName { get; private set; } = channelName;
