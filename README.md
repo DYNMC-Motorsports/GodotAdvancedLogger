@@ -1,142 +1,123 @@
-# Godot Advanced Logger
+# Godot Advanced Logger (C#)
 
-Godot Advanced Logger is a robust and extensible C# logging framework designed specifically for Godot 4.x.
+Godot Advanced Logger is a robust, high-performance, and structured logging framework designed specifically for Godot 4.x C# projects. 
 
-This plugin replaces standard console printing with a structured, channel-based system. It supports multiple simultaneous output targets, including rich console output and persistent file logging, while providing a flexible "Context Logger" architecture to encapsulate logging logic within specific game subsystems.
+Moving beyond standard `GD.Print` console outputs, this plugin introduces a standard logging architecture. It is built from the ground up to prevent garbage collector spikes (Zero-Allocation), support structured data (JSON), and stream logs in real-time to external dashboards like Seq.
 
-## Description
+## Key Features
 
-The framework is built around a centralized Singleton architecture that ensures logs are captured reliably from any thread. It creates a standardized logging format that assists in debugging complex systems by separating log generation from log consumption. Key capabilities include:
-
-* **Centralized Management:** A static `LogManager` accessible globally.
-* **Multi-Target Output:** Simultaneous writing to the Godot Console (using rich text formatting) and local log files.
-* **Context-Aware Logging:** An inheritance-based system allowing for specialized loggers (e.g., `CombatLogger`) that automatically handle channel tagging and formatting logic.
-* **Crash Safety:** Robust exception handling ensuring critical errors and stack traces are flushed to disk even during application instability.
+* **Zero-Allocation Architecture:** Uses `readonly record struct` and pre-evaluation checks (`IsEnabled`) to ensure disabled logs consume **zero** string formatting or memory allocation, preventing GC stutters.
+* **Structured Logging:** Stop parsing messy text strings. Send exact data points (e.g., `attackDamage = 150`) via C# Dictionaries, making your logs fully searchable and filterable in external tools like Seq.
+* **Multi-Target Output:** Write simultaneously to:
+  * Godot Console (with Rich Text BBCode colors)
+  * Text Files (`.txt` for quick reading)
+  * JSON Lines Files (`.jsonl` for programmatic parsing)
+  * **Seq HTTP Server** (Real-time dashboard streaming)
+* **Godot UI Integration:** Toggle writers and configure API keys directly within Godot's Project Settings. No code changes required.
 
 ## Installation
 
-1.  Download the repository.
-2.  Copy the `addons/godot_advanced_logger` directory into your project's `addons/` folder.
-3.  Build your C# solution (Project -> Tools -> C# -> Build).
-4.  Navigate to **Project Settings** -> **Plugins** and enable "Godot Advanced Logger".
+1. Download the repository.
+2. Copy the `addons/godot_advanced_logger` directory into your project's `addons/` folder.
+4. Build your C# solution (`Project -> Tools -> C# -> Build`).
+5. Navigate to **Project Settings -> Plugins** and enable "Godot Advanced Logger".
+6. Test the plugin with the examples found in the `addons/godot_advanced_logger/examples` directory.
 
-**Note:** This plugin requires a Godot project initialized with C# (.NET) support.
-
-## Usage Guide
-
-Upon enabling the plugin, the `LogManager` singleton is initialized automatically. It can be accessed directly from any script in your project.
-
-### Basic Logging
-
-You can log Info, Warning, Error and Debug messages globally using the static methods provided by the manager.
-
-```csharp
-using Godot;
-using System;
-
-public partial class GameBootstrapper : Node
-{
-    public override void _Ready()
-    {
-        // Log simple informational messages
-        LogManager.Info("System", "Game engine initialized successfully.");
-
-        // Log warnings for non-critical issues
-        LogManager.Warning("ResourceLoader", "Texture memory is at 85% capacity.");
-
-        // Log errors with optional Exception handling
-        try 
-        {
-            // Simulate a connection error
-            throw new TimeoutException("Connection timed out.");
-        }
-        catch (Exception ex)
-        {
-            // The logger captures the stack trace automatically
-            LogManager.Error("Network", "Failed to connect to master server.", ex);
-        }
-    }
-}
-```
-
-## Advanced Architecture: Context Loggers
-
-To maintain clean code in larger projects, it is recommended to avoid manually typing channel names (e.g., "Combat", "UI") for every log entry. Instead, this framework utilizes **Context Loggers**.
-
-A Context Logger is a wrapper class that encapsulates the channel identity. This allows developers to implement domain-specific logging methods (such as `LogDamage` or `LogTransaction`) that handle formatting internally.
-
-### 1. Creating a Custom Logger
-
-Inherit from the `ContextLogger` class to create a specialized logger. This enables the encapsulation of business logic within the logging layer.
-
-```csharp
-using System;
-
-// 1. Inherit from ContextLogger
-public class CombatLogger : ContextLogger
-{
-    // 2. Pass the fixed channel name "Combat" to the base constructor
-    public CombatLogger() : base("Combat") { }
-
-    // 3. Add semantic methods that handle formatting logic
-    public void LogAttack(string attacker, string target, int damage, bool isCritical)
-    {
-        string message = $"{attacker} attacks {target} for {damage} DMG";
-
-        if (isCritical)
-        {
-            // Escalate critical hits to Warnings for better visibility
-            Warning($"{message} (CRITICAL HIT!)");
-        }
-        else if (damage == 0)
-        {
-            // Downgrade misses to Debug logs to avoid clutter
-            Debug($"{attacker} missed {target}.");
-        }
-        else
-        {
-            Info(message);
-        }
-    }
-}
-```
-
-### 2. Implementing the Custom Logger
-
-Instantiate the custom logger within your game scripts (e.g., Player controller, Game Manager).
-
-```csharp
-using Godot;
-
-public partial class Player : Node
-{
-    // Instantiate the custom logger
-    private readonly CombatLogger _combatLog = new CombatLogger();
-
-    public void TakeDamage(int damage)
-    {
-        // Usage is clean and readable
-        _combatLog.LogAttack("Skeleton_Warrior", "Player_1", damage, isCritical: true);
-    }
-}
-```
-
-## File Output System
-
-Logs are automatically serialized and written to the user data directory to facilitate post-execution analysis.
-
-* **Directory:** `user://logs/godotadvancedlogger`
-* **File Naming:** `session_[date].log`
-* **Format:** `Timestamp | Level | Channel | Message`
-
-To access these files, select **Project** -> **Open User Data Folder** within the Godot Editor.
+*Note: This plugin requires a Godot project initialized with C# (.NET) support.*
 
 ## Configuration
 
-Configuration is currently handled via the `LogManager.cs` file. Future updates may expose these settings via Project Settings.
-* Enable/Disable global logging.
-* Mute specific channels.
-* Modify timestamp formats.
+Once enabled, you can configure the logger visually. 
+Go to **Project Settings -> General -> Addons -> Godot Advanced Logger**.
+Here you can:
+* Set the minimum Log Level (e.g., Info, Warning).
+* Mute noisy channels.
+* Enable/Disable specific Writers (Console, File, JSON, Seq).
+* Set your Seq Server URL.
+
+## Usage Guide
+
+### Basic vs. Structured Logging
+
+The traditional way of logging forces you to bake variables into a string. This is slow and hard to search later.
+
+```cs
+// BAD: Allocates memory even if Debug is disabled, hard to search later
+LogManager.Debug($"Player {playerName} took {damage} damage from {enemy}.");
+```
+
+**The Advanced Logger Way:** Separate the *message* from the *data*.
+
+```cs
+// GOOD: Clean message, searchable data, zero allocations if Info is muted
+LogManager.Info("Player Damaged", new Dictionary<string, object> 
+{
+    { "PlayerName", playerName },
+    { "Damage", damage },
+    { "EnemyType", enemy }
+});
+```
+
+### Context Loggers (Best Practice)
+
+For larger projects, create dedicated Loggers for your systems by inheriting from `ContextLogger`. This encapsulates logic and channels.
+
+```cs
+using Godot;
+using System.Collections.Generic;
+using GodotAdvancedLogger; // Adjust namespace to match your project
+
+public class CombatLogger : ContextLogger
+{
+    // Tag all logs from this class with the "Combat" channel
+    public CombatLogger() : base("Combat") { }
+
+    public void LogAttack(string attacker, string target, int damage, bool isCritical)
+    {
+        // 1. Performance Gate: Abort immediately if this level is muted!
+        LogLevel level = isCritical ? LogLevel.Warning : LogLevel.Info;
+        if (!IsEnabled(level)) return;
+
+        // 2. Build structured data
+        var context = new Dictionary<string, object>
+        {
+            { "Attacker", attacker },
+            { "Target", target },
+            { "Damage", damage },
+            { "IsCritical", isCritical }
+        };
+
+        // 3. Log
+        if (isCritical) Warning("Critical Hit Executed", context);
+        else Info("Attack Executed", context);
+    }
+}
+```
+
+### Real-Time Analytics with Seq (Highly Recommended)
+
+This plugin includes native support for **Seq**, a free, local log server that acts as a real-time database for your game.
+
+1. Start Seq locally via Docker:
+
+```cmd
+docker run \
+  --name seq \
+  -d \
+  --restart unless-stopped \
+  -e ACCEPT_EULA=Y \
+  -e SEQ_FIRSTRUN_ADMINPASSWORD=<password> \
+  -v <local path to store data>:/data \
+  -p 5341:80 \
+  datalust/seq
+```
+
+2. In Godot, go to **Project Settings -> Addons -> Godot Advanced Logger** and check **Enable Seq**.
+3. Run your game and open `http://localhost:5341` in your browser.
+4. Watch your logs stream in live. Use the search bar to query your game data instantly: 
+   *(e.g., `Channel = 'Combat' and Damage > 50`)*
+
+*Note: Replace the placeholders `<password>` and `<local path to store data>` with your local settings.*
 
 ## License
 
