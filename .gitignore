@@ -21,3 +21,6 @@ mono_crash.*.json
 
 # MAC specific ignores
 .DS_Store
+Godot Advanced Logger.png.import
+Example Seq.png.import
+Example Console.png.import
