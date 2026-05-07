@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using Godot;
 
 namespace GodotAdvancedLogger.addons.godot_advanced_logger.core;
@@ -117,11 +118,27 @@ public partial class LogManager : Node
     }
 
 #nullable enable
-    public static void Log(LogLevel level, string channel, string message, Dictionary<string, object>? context = null, Exception? ex = null)
+    public static void Log(
+        LogLevel level, 
+        string channel,
+        string message,
+        [CallerFilePath] string callerFilePath = "",
+        [CallerMemberName] string callerMemberName = "",
+        [CallerLineNumber] int callerLineNumber = 0,
+        Dictionary<string, object>? context = null, 
+        Exception? ex = null)
     {
         if (!IsLevelEnabled(level, channel)) return;
 
-        var entry = new LogEntry(DateTime.Now, level, channel, message, context, ex);
+        var entry = new LogEntry(
+            DateTime.Now, 
+            level, channel, 
+            message, 
+            callerFilePath, 
+            callerMemberName, 
+            callerLineNumber, 
+            context, 
+            ex);
 
         foreach (var writer in Instance._writers)
         {

@@ -85,6 +85,7 @@ public class JsonFileWriter : ILogWriter
             Timestamp = entry.Timestamp.ToString("O"),
             Level = entry.Level.ToString(),
             Channel = entry.Channel,
+            Caller = $"{Path.GetFileName(entry.CallerFilePath)}:{entry.CallerLineNumber} ({entry.CallerMemberName})",
             Message = entry.Message,
             Context = entry.ContextData,
             Exception = entry.Exception?.ToString()
