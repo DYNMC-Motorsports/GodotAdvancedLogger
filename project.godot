@@ -8,6 +8,10 @@
 
 config_version=5
 
+[addons]
+
+godot_advanced_logger/writers/enable_seq=true
+
 [animation]
 
 compatibility/default_parent_skeleton_in_mesh_instance_3d=true

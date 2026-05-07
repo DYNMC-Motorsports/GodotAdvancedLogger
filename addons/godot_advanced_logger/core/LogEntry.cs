@@ -8,6 +8,9 @@ public readonly record struct LogEntry(
     LogLevel Level,
     string Channel,
     string Message,
+    string CallerFilePath = "",
+    string CallerMemberName = "",
+    int CallerLineNumber = 0,
 #nullable enable
     Dictionary<string, object>? ContextData = null,
     Exception? Exception = null

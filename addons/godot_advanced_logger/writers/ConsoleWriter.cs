@@ -1,3 +1,4 @@
+using System.IO;
 using System.Linq;
 using System.Text;
 using Godot;
@@ -14,10 +15,12 @@ public class ConsoleWriter : ILogWriter
         string color = GetColor(entry.Level);
         string time = entry.Timestamp.ToString("HH:mm:ss");
         
-        var sb = new StringBuilder();
-        sb.Append($"[color=gray]{time}[/color] [color={color}][b][{entry.Level}][/b][/color] [color=white][{entry.Channel}][/color] {entry.Message}");
+        string fileName = string.IsNullOrEmpty(entry.CallerFilePath) ? "Unknown" : Path.GetFileName(entry.CallerFilePath);
+        string callerInfo = $"{fileName}:{entry.CallerLineNumber}";
 
-        // Context-Daten schick in der Godot Konsole rendern
+        var sb = new StringBuilder();
+        sb.Append($"[color=gray]{time}[/color] [color={color}][b][{entry.Level}][/b][/color] [color=lightgray]({callerInfo})[/color] [color=white][{entry.Channel}][/color] {entry.Message}");
+        
         if (entry.ContextData != null && entry.ContextData.Count > 0)
         {
             string contextStr = string.Join(" | ", entry.ContextData.Select(kvp => $"{kvp.Key}={kvp.Value}"));

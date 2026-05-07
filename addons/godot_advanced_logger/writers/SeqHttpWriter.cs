@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
@@ -22,15 +23,14 @@ public class SeqHttpWriter : ILogWriter
     
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
-        //PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
     };
 
     /// <summary>
-    /// Initialisiert den Seq-Writer.
+    /// Initializes a SeqHttpWriter
     /// </summary>
-    /// <param name="serverUrl">Die Basis-URL des Seq-Servers</param>
-    /// <param name="apiKey">Optional: Ein API-Key, falls in Seq konfiguriert</param>
+    /// <param name="serverUrl">Base URL of the Seq-Server</param>
+    /// <param name="apiKey">Optional: API Key used for authentication</param>
     public SeqHttpWriter(string serverUrl = "http://localhost:5341", string apiKey = null)
     {
         _serverUrl = serverUrl.TrimEnd('/');
@@ -90,30 +90,43 @@ public class SeqHttpWriter : ILogWriter
                     _ => "Information"
                 };
                 
+                string normalizedPath = string.IsNullOrEmpty(entry.CallerFilePath) ? "" : entry.CallerFilePath.Replace("\\", "/");
+                
                 var properties = new Dictionary<string, object>
                 {
                     { "SessionId", core.LogManager.SessionId },
                     { "GameVersion", ProjectSettings.GetSetting("application/config/version") },
-                    { "Channel", entry.Channel }
+                    { "Channel", entry.Channel },
+                    
+                    // Lesbarer String für die Seq-Tabelle
+                    { "Caller", $"{Path.GetFileName(entry.CallerFilePath)}:{entry.CallerLineNumber} ({entry.CallerMemberName})" },
                 };
-
+                
                 if (entry.ContextData != null)
                 {
                     foreach (var kvp in entry.ContextData)
                     {
-                        // Überschreibe "Channel" nicht aus Versehen
-                        if (kvp.Key != "Channel") properties[kvp.Key] = kvp.Value;
+                        if (!properties.ContainsKey(kvp.Key)) 
+                        {
+                            properties[kvp.Key] = kvp.Value;
+                        }
                     }
                 }
-
-                payload.Events.Add(new
+                
+                var eventData = new Dictionary<string, object>
                 {
-                    Timestamp = entry.Timestamp.ToString("O"), // ISO 8601 Format
-                    Level = seqLevel,
-                    MessageTemplate = entry.Message, // Seq nutzt MessageTemplate
-                    Properties = properties,
-                    Exception = entry.Exception?.ToString()
-                });
+                    { "Timestamp", entry.Timestamp.ToString("O") },
+                    { "Level", seqLevel },
+                    { "MessageTemplate", entry.Message },
+                    { "Properties", properties }
+                };
+
+                if (entry.Exception != null)
+                {
+                    eventData.Add("Exception", entry.Exception.ToString());
+                }
+
+                payload.Events.Add(eventData);
             }
 
             string json = JsonSerializer.Serialize(payload, JsonOptions);
@@ -123,8 +136,7 @@ public class SeqHttpWriter : ILogWriter
             {
                 content.Headers.Add("X-Seq-ApiKey", _apiKey);
             }
-
-            // Der Endpunkt für raw JSON in Seq
+            
             var response = await HttpClient.PostAsync($"{_serverUrl}/api/events/raw", content, _cts.Token);
 
             if (!response.IsSuccessStatusCode)
@@ -145,8 +157,7 @@ public class SeqHttpWriter : ILogWriter
         _cts?.Cancel();
         
         try { _loggingTask?.Wait(1000); } catch { }
-
-        // Restliche Logs flushen
+        
         var finalBatch = new List<core.LogEntry>();
         while (_logQueue.TryDequeue(out var entry))
         {
@@ -155,7 +166,6 @@ public class SeqHttpWriter : ILogWriter
 
         if (finalBatch.Count > 0)
         {
-            // Synchron warten beim Herunterfahren
             SendBatchAsync(finalBatch).Wait(1000); 
         }
 
