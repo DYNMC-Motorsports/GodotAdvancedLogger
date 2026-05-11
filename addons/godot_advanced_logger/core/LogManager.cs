@@ -39,6 +39,11 @@ public partial class LogManager : Node
         bool GetBoolSetting(string path, bool def) => 
             ProjectSettings.HasSetting(path) ? ProjectSettings.GetSetting(path).AsBool() : def;
         
+        if (GetBoolSetting("addons/godot_advanced_logger/writers/enable_overlay", true))
+        {
+            AddWriter(new writers.DebugScreenWriter());
+        }
+        
         if (GetBoolSetting("addons/godot_advanced_logger/writers/enable_console", true))
         {
             AddWriter(new writers.ConsoleWriter());
