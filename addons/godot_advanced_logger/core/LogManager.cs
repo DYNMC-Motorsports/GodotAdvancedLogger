@@ -18,6 +18,7 @@ public partial class LogManager : Node
     
     private const string SettingMutedChannels = "addons/godot_advanced_logger/settings/muted_channels";
     private const string SettingLogLevel = "addons/godot_advanced_logger/settings/min_log_level";
+    private const string SettingLogLevelRelease = "addons/godot_advanced_logger/settings/min_log_level_release";
 
     public bool IsGlobalEnabled { get; set; } = true;
 
@@ -39,6 +40,8 @@ public partial class LogManager : Node
         bool GetBoolSetting(string path, bool def) => 
             ProjectSettings.HasSetting(path) ? ProjectSettings.GetSetting(path).AsBool() : def;
         
+        bool isDebugBuild = OS.IsDebugBuild();
+        
         if (GetBoolSetting("addons/godot_advanced_logger/writers/enable_console", true))
         {
             AddWriter(new writers.ConsoleWriter());
@@ -53,23 +56,44 @@ public partial class LogManager : Node
         {
             AddWriter(new writers.JsonFileWriter());
         }
-        
-        if (GetBoolSetting("addons/godot_advanced_logger/writers/enable_seq", false))
-        {
-            string seqUrl = ProjectSettings.HasSetting("addons/godot_advanced_logger/seq/server_url") 
-                ? ProjectSettings.GetSetting("addons/godot_advanced_logger/seq/server_url").AsString() 
-                : "http://localhost:5341";
-                
-            string seqKey = ProjectSettings.HasSetting("addons/godot_advanced_logger/seq/api_key") 
-                ? ProjectSettings.GetSetting("addons/godot_advanced_logger/seq/api_key").AsString() 
-                : null;
 
-            AddWriter(new writers.SeqHttpWriter(seqUrl, seqKey));
+        if (isDebugBuild)
+        {
+            if (GetBoolSetting("addons/godot_advanced_logger/writers/enable_seq", false))
+            {
+                string seqUrl = ProjectSettings.HasSetting("addons/godot_advanced_logger/seq/server_url") 
+                    ? ProjectSettings.GetSetting("addons/godot_advanced_logger/seq/server_url").AsString() 
+                    : "http://localhost:5341";
+                
+                string seqKey = ProjectSettings.HasSetting("addons/godot_advanced_logger/seq/api_key") 
+                    ? ProjectSettings.GetSetting("addons/godot_advanced_logger/seq/api_key").AsString() 
+                    : null;
+
+                AddWriter(new writers.SeqHttpWriter(seqUrl, seqKey));
+            }
+            
+            if (GetBoolSetting("addons/godot_advanced_logger/writers/enable_overlay", true))
+            {
+                AddWriter(new writers.DebugScreenWriter());
+            }
+        } 
+        else
+        {
+            GD.Print("[GodotAdvancedLogger] Release Build detected. Dev-Tools (Seq, InGameUI) are hard-disabled.");
         }
     }
     
     private void LoadSettings()
     {
+        bool isDebug = OS.IsDebugBuild();
+        
+        string activeSettingPath = isDebug ? SettingLogLevel : SettingLogLevelRelease;
+        
+        if (!ProjectSettings.HasSetting(activeSettingPath))
+        {
+            activeSettingPath = SettingLogLevel;
+        }
+        
         if (ProjectSettings.HasSetting(SettingMutedChannels))
         {
             string rawString = ProjectSettings.GetSetting(SettingMutedChannels).AsString();
@@ -84,12 +108,14 @@ public partial class LogManager : Node
             }
         }
 
-        if (ProjectSettings.HasSetting(SettingLogLevel))
+        if (ProjectSettings.HasSetting(activeSettingPath))
         {
-            int levelInt = ProjectSettings.GetSetting(SettingLogLevel).AsInt32();
+            int levelInt = ProjectSettings.GetSetting(activeSettingPath).AsInt32();
             if (Enum.IsDefined(typeof(LogLevel), levelInt))
             {
                 _minLogLevel = (LogLevel)levelInt;
+                
+                GD.Print($"[LogManager] Configured for {(isDebug ? "Debug" : "Release")}. Min Level: {_minLogLevel}");
             }
         }
     }

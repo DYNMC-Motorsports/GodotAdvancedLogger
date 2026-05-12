@@ -8,10 +8,16 @@ public partial class GodotAdvancedLogger : EditorPlugin
 {
     private const string AutoloadName = "LogManager";
     private const string AutoloadPath = "res://addons/godot_advanced_logger/core/LogManager.cs";
+
+    private const string AutoloadNameOverlay = "DebugScreen";
+    private const string AutoloadPathOverlay = "res://addons/godot_advanced_logger/core/ui/DebugScreen.cs";
     
     private const string SettingMutedChannels = "addons/godot_advanced_logger/settings/muted_channels";
     private const string SettingLogLevel = "addons/godot_advanced_logger/settings/min_log_level";
+    private const string SettingOverlayToggleHotkey = "addons/godot_advanced_logger/settings/ingame_ui_hotkey";
+    private const string SettingLogLevelRelease = "addons/godot_advanced_logger/settings/min_log_level_release";
     
+    private const string SettingEnableOverlay = "addons/godot_advanced_logger/writers/enable_overlay";
     private const string SettingEnableConsole = "addons/godot_advanced_logger/writers/enable_console";
     private const string SettingEnableFile = "addons/godot_advanced_logger/writers/enable_file";
     private const string SettingEnableJson = "addons/godot_advanced_logger/writers/enable_json";
@@ -28,12 +34,16 @@ public partial class GodotAdvancedLogger : EditorPlugin
             return;
         }
         AddAutoloadSingleton(AutoloadName, AutoloadPath);
+        AddAutoloadSingleton(AutoloadNameOverlay, AutoloadPathOverlay);
         
         // Globale Settings
         AddCustomProjectSetting(SettingMutedChannels, "", Variant.Type.String, PropertyHint.None, "Comma separated list (e.g. Physics, AI)");
+        AddCustomProjectSetting(SettingOverlayToggleHotkey, "F12", Variant.Type.String);
         AddCustomProjectSetting(SettingLogLevel, 0, Variant.Type.Int, PropertyHint.Enum, "Debug,Info,Warning,Error");
+        AddCustomProjectSetting(SettingLogLevelRelease, 1, Variant.Type.Int, PropertyHint.Enum, "Debug,Info,Warning,Error");
         
         // Writer Toggles 
+        AddCustomProjectSetting(SettingEnableOverlay, true, Variant.Type.Bool);
         AddCustomProjectSetting(SettingEnableConsole, true, Variant.Type.Bool);
         AddCustomProjectSetting(SettingEnableFile, false, Variant.Type.Bool);
         AddCustomProjectSetting(SettingEnableJson, false, Variant.Type.Bool);

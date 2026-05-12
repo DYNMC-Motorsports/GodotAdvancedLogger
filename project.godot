@@ -8,10 +8,6 @@
 
 config_version=5
 
-[addons]
-
-godot_advanced_logger/writers/enable_seq=true
-
 [animation]
 
 compatibility/default_parent_skeleton_in_mesh_instance_3d=true
@@ -24,7 +20,13 @@ config/features=PackedStringArray("4.6", "C#", "Forward Plus")
 
 [autoload]
 
+DebugScreen="*uid://breuhq7eo4c2t"
 LogManager="*uid://bmcwf1i6688si"
+
+[display]
+
+window/size/viewport_width=1980
+window/size/viewport_height=1080
 
 [dotnet]
 

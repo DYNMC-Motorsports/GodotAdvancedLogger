@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://wylc7cnpj5ic"]
+
+[ext_resource type="Script" uid="uid://diu3b67qpjnru" path="res://addons/godot_advanced_logger/examples/debug_screen/DebugScreenExampleScene.cs" id="1_q7y4w"]
+
+[node name="DebugScreenExample" type="Node" unique_id=1393649962]
+script = ExtResource("1_q7y4w")
