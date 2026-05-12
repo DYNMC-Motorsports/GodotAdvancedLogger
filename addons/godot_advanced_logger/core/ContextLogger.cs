@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 
 namespace GodotAdvancedLogger.addons.godot_advanced_logger.core;
@@ -22,6 +23,7 @@ public class ContextLogger(string channelName)
         [CallerFilePath] string file = "", [CallerMemberName] string member = "", [CallerLineNumber] int line = 0) 
         => LogManager.Log(LogLevel.Error, ChannelName, message, file, member, line, context, ex);
         
+    [Conditional("DEBUG")]
     public void Debug(string message, Dictionary<string, object> context = null,
         [CallerFilePath] string file = "", [CallerMemberName] string member = "", [CallerLineNumber] int line = 0) 
         => LogManager.Log(LogLevel.Debug, ChannelName, message, file, member, line, context, null);
