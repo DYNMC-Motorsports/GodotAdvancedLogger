@@ -99,7 +99,6 @@ private void BuildUi()
         _mainContainer.CustomMinimumSize = new Vector2(500, 0);
         
         AddChild(_mainContainer);
-        AddChild(_mainContainer);
         
         var vSplit = new VBoxContainer();
         vSplit.SetAnchorsPreset(Control.LayoutPreset.FullRect);
