@@ -6,11 +6,11 @@ Moving beyond standard `GD.Print` console outputs, this plugin introduces a stan
 
 ## Key Features
 
-## Key Features
 * **Zero-Cost Debugging:** `Debug()` calls utilize C#'s `[Conditional("DEBUG")]` attribute. In your final Release builds, the compiler completely strips these calls, ensuring **zero** CPU overhead and memory allocation.
 * **In-Game Debug Screen:** A toggleable, right-aligned overlay to read logs directly inside your standalone game exports. Fully extensible via the `IDebugPanel` API to add your own custom developer tools.
 * **Production Safe:** Automatically detects Release exports (`OS.IsDebugBuild()`) and hard-disables developer tools (like the UI and network writers) while intelligently throttling log verbosity based on separate Editor/Release settings.
 * **Structured Logging:** Stop parsing messy text strings. Send exact data points via C# Dictionaries, making your logs fully searchable and filterable in external tools.
+* **Editor Integration:** Warnings and errors are reported to Godot's error stream, so they show up in **Debugger -> Errors** with a stack trace instead of scrolling past in Output.
 * **Multi-Target Output:** Write simultaneously to:
   * Godot Console (with Rich Text BBCode colors)
   * In-Game UI Overlay
@@ -22,9 +22,9 @@ Moving beyond standard `GD.Print` console outputs, this plugin introduces a stan
 
 1. Download the repository.
 2. Copy the `addons/godot_advanced_logger` directory into your project's `addons/` folder.
-4. Build your C# solution (`Project -> Tools -> C# -> Build`).
-5. Navigate to **Project Settings -> Plugins** and enable "Godot Advanced Logger".
-6. Test the plugin with the examples found in the `addons/godot_advanced_logger/examples` directory.
+3. Build your C# solution (`Project -> Tools -> C# -> Build`).
+4. Navigate to **Project Settings -> Plugins** and enable "Godot Advanced Logger".
+5. Test the plugin with the examples found in the `addons/godot_advanced_logger/examples` directory.
 
 *Note: This plugin requires a Godot project initialized with C# (.NET) support.*
 
@@ -41,26 +41,50 @@ Here you can:
 
 ## Usage Guide
 
+All types live under `GodotAdvancedLogger.addons.godot_advanced_logger.core`, so start with:
+
+```cs
+using GodotAdvancedLogger.addons.godot_advanced_logger.core;
+```
+
 ### Basic vs. Structured Logging
 
 The traditional way of logging forces you to bake variables into a string. This is slow and hard to search later.
 
 ```cs
-// BAD: Allocates memory even if Debug is disabled, hard to search later
-ContextLogger.Info($"Player {playerName} took {damage} damage from {enemy}.");
+// BAD: builds a throwaway string on every call, and the values are
+// welded into text you later have to grep or regex back out.
+LogManager.Info($"Player {playerName} took {damage} damage from {enemy}.");
 ```
 
 **The Advanced Logger Way:** Separate the *message* from the *data*.
 
 ```cs
-// GOOD: Clean message, searchable data, zero allocations if Info is muted
-ContextLogger.Info("Player Damaged", new Dictionary<string, object> 
+// GOOD: stable message, searchable data, and nothing is built at all
+// if Info is below the minimum level or the channel is muted.
+LogManager.Info("Player Damaged", new Dictionary<string, object>
 {
     { "PlayerName", playerName },
     { "Damage", damage },
     { "EnemyType", enemy }
-});
+}, channel: "Combat");
 ```
+
+`LogManager` exposes four static entry points. All of them take the context dictionary
+second, and pick up the calling file, member and line automatically:
+
+```cs
+LogManager.Debug("Cache warm started");                       // stripped entirely in release builds
+LogManager.Info("Level loaded", new() { { "Level", 3 } });
+LogManager.Warning("Frame budget exceeded", channel: "Perf");
+LogManager.Error("Save failed", ex, channel: "IO");
+```
+
+Entries with no explicit `channel` land on the `General` channel.
+
+> Migrating from 2.0.x: `LogManager.Log(...)` still works but is marked `[Obsolete]`.
+> Its `[Caller*]` parameters sit *before* `context`, which makes `context` impossible to
+> pass positionally. Use `LogManager.Write(...)` or the helpers above instead.
 
 ### Context Loggers (Best Practice)
 
@@ -69,7 +93,7 @@ For larger projects, create dedicated Loggers for your systems by inheriting fro
 ```cs
 using Godot;
 using System.Collections.Generic;
-using GodotAdvancedLogger; // Adjust namespace to match your project
+using GodotAdvancedLogger.addons.godot_advanced_logger.core;
 
 public class CombatLogger : ContextLogger
 {
@@ -125,7 +149,7 @@ docker run \
 
 ### In-Game Debug Screen & Custom Panels
 
-The plugin ships with a built-in `DebugScreen` Autoload. By default, pressing `F12` opens a side-panel displaying your real-time logs with channel and level filtering.
+The plugin ships with a built-in `DebugScreen` Autoload. By default, pressing `F12` opens a side-panel displaying your real-time logs with channel and level filtering, plus **Clear** and **Copy visible** buttons — the latter puts the currently filtered log text on the clipboard, ready to paste into a bug report.
 
 You can easily add your own debug tabs (e.g., a "Performance" or "Entity Inspector" tab) by implementing the `IDebugPanel` interface:
 
@@ -133,7 +157,7 @@ You can easily add your own debug tabs (e.g., a "Performance" or "Entity Inspect
 using Godot;
 using GodotAdvancedLogger.addons.godot_advanced_logger.core.ui;
 
-public partial class PerformanceDebugPanel : IDebugPanel
+public class PerformanceDebugPanel : IDebugPanel
 {
     private Label _fpsLabel;
 
@@ -183,6 +207,18 @@ if (DebugScreen.Instance != null)
     DebugScreen.Instance.RegisterDebugPanel(new PerformanceDebugPanel());
 }
 ```
+
+Panels can also be removed again — useful when a panel belongs to a scene that unloads:
+
+```csharp
+DebugScreen.Instance?.UnregisterDebugPanel("Performance");
+```
+
+## Log files
+
+`FileWriter` and `JsonFileWriter` write to `user://logs/godotadvancedlogger`, one file per
+run, named `log_<timestamp>.txt` / `.jsonl`. Each writer keeps its 50 most recent files and
+deletes the rest on startup.
 
 ## License
 

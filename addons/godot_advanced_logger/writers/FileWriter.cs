@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Concurrent;
 using System.IO;
-using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -10,21 +9,35 @@ using Godot;
 
 namespace GodotAdvancedLogger.addons.godot_advanced_logger.writers;
 
+/// <summary>
+/// Appends log entries to a tab-separated <c>.txt</c> file under <c>user://logs/godotadvancedlogger</c>.
+/// Writing happens on a background thread so the game loop never blocks on disk I/O.
+/// </summary>
 public class FileWriter : ILogWriter
 {
+    private const string FilePattern = "log_*.txt";
+    private const int FlushIntervalMs = 50;
+
     private readonly string _logDirectory;
+    private readonly int _maxFiles;
+
     private string _currentFilePath;
     private StreamWriter _writer;
-    
+
     private readonly ConcurrentQueue<core.LogEntry> _logQueue = new();
-    
+
     private CancellationTokenSource _cts;
     private Task _loggingTask;
 
-    public FileWriter()
+    /// <param name="maxFiles">How many log files to keep before the oldest are deleted.</param>
+    public FileWriter(int maxFiles = 50)
     {
         _logDirectory = ProjectSettings.GlobalizePath("user://logs/godotadvancedlogger");
+        _maxFiles = maxFiles;
     }
+
+    /// <summary>Absolute path of the file this writer is currently appending to.</summary>
+    public string CurrentFilePath => _currentFilePath;
 
     public void Initialize()
     {
@@ -37,12 +50,13 @@ public class FileWriter : ILogWriter
             _currentFilePath = Path.Combine(_logDirectory, filename);
 
             var fileStream = new FileStream(_currentFilePath, FileMode.Create, System.IO.FileAccess.Write, FileShare.Read);
-            _writer = new StreamWriter(fileStream, Encoding.UTF8) { AutoFlush = true };
+            
+            _writer = new StreamWriter(fileStream, Encoding.UTF8) { AutoFlush = false };
 
             _cts = new CancellationTokenSource();
-            _loggingTask = Task.Run(ProcessQueue, _cts.Token);
-            
-            CleanupOldLogs();
+            _loggingTask = Task.Run(() => ProcessQueue(_cts.Token), _cts.Token);
+
+            LogFileRetention.Apply(_logDirectory, FilePattern, _maxFiles, nameof(FileWriter));
         }
         catch (Exception e)
         {
@@ -52,20 +66,18 @@ public class FileWriter : ILogWriter
 
     public void Write(in core.LogEntry entry)
     {
-        // Da ConcurrentQueue structs By-Value nimmt, wird hier eine Kopie auf den Heap/Queue gelegt.
-        // Das ist für das asynchrone Schreiben notwendig und völlig in Ordnung.
         _logQueue.Enqueue(entry);
     }
 
-    private async Task ProcessQueue()
+    private async Task ProcessQueue(CancellationToken token)
     {
-        while (!_cts.Token.IsCancellationRequested)
+        while (!token.IsCancellationRequested)
         {
             bool wroteAny = false;
-            
+
             while (_logQueue.TryDequeue(out core.LogEntry entry))
             {
-                await WriteToFileAsync(entry);
+                await WriteLineAsync(entry);
                 wroteAny = true;
             }
 
@@ -74,69 +86,82 @@ public class FileWriter : ILogWriter
                 await _writer.FlushAsync();
             }
 
-            await Task.Delay(50);
+            try
+            {
+                await Task.Delay(FlushIntervalMs, token);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
         }
     }
 
-    private async Task WriteToFileAsync(core.LogEntry entry)
+    private async Task WriteLineAsync(core.LogEntry entry)
     {
         if (_writer == null) return;
+        await _writer.WriteLineAsync(FormatLine(entry));
+    }
 
+    /// <summary>
+    /// Renders one entry as a tab-separated line. Shared by the background loop and the
+    /// shutdown flush so entries written during teardown keep their level, channel,
+    /// context and exception instead of degrading to a bare message.
+    /// </summary>
+    private static string FormatLine(in core.LogEntry entry)
+    {
         var sb = new StringBuilder();
         sb.Append(entry.Timestamp.ToString("yyyy-MM-dd HH:mm:ss.fff"));
-        sb.Append('\t').Append(entry.Level.ToString().ToUpper());
+        sb.Append('\t').Append(entry.Level.ToString().ToUpperInvariant());
         sb.Append('\t').Append(entry.Channel);
         sb.Append('\t').Append(entry.Message);
-         
-        if (entry.ContextData != null && entry.ContextData.Count > 0)
+
+        if (entry.ContextData is { Count: > 0 })
         {
-            try 
+            try
             {
                 sb.Append('\t').Append(JsonSerializer.Serialize(entry.ContextData));
-            } 
-            catch { /* Ignore */ }
+            }
+            catch (Exception e)
+            {
+                sb.Append("\t<context could not be serialized: ").Append(e.Message).Append('>');
+            }
         }
 
         if (entry.Exception != null)
         {
-            sb.AppendLine().Append(entry.Exception.ToString());
+            sb.AppendLine().Append(entry.Exception);
         }
 
-        await _writer.WriteLineAsync(sb.ToString());
-    }
-
-    private void CleanupOldLogs()
-    {
-        try
-        {
-            var info = new DirectoryInfo(_logDirectory);
-            var files = info.GetFiles("log_*.txt")
-                .OrderByDescending(f => f.CreationTime)
-                .ToList();
-
-            if (files.Count > 50)
-            {
-                for (int i = 50; i < files.Count; i++)
-                {
-                    files[i].Delete();
-                }
-            }
-        }
-        catch (Exception e) { GD.PrintErr($"[FileWriter] Cleanup failed: {e.Message}"); }
+        return sb.ToString();
     }
 
     public void Shutdown()
     {
         _cts?.Cancel();
-        
-        try { _loggingTask?.Wait(1000); } catch { }
 
-        while (_logQueue.TryDequeue(out core.LogEntry entry))
+        try { _loggingTask?.Wait(500); } catch { /* worker is being torn down */ }
+
+        try
         {
-            _writer?.WriteLine($"[SHUTDOWN FLUSH] {entry.Message}");
-        }
+            while (_logQueue.TryDequeue(out core.LogEntry entry))
+            {
+                _writer?.WriteLine(FormatLine(entry));
+            }
 
-        _writer?.Dispose();
-        _cts?.Dispose();
+            _writer?.Flush();
+        }
+        catch (Exception e)
+        {
+            GD.PrintErr($"[FileWriter] Final flush failed: {e.Message}");
+        }
+        finally
+        {
+            _writer?.Dispose();
+            _writer = null;
+
+            _cts?.Dispose();
+            _cts = null;
+        }
     }
 }
