@@ -47,14 +47,14 @@ The traditional way of logging forces you to bake variables into a string. This 
 
 ```cs
 // BAD: Allocates memory even if Debug is disabled, hard to search later
-LogManager.Debug($"Player {playerName} took {damage} damage from {enemy}.");
+ContextLogger.Info($"Player {playerName} took {damage} damage from {enemy}.");
 ```
 
 **The Advanced Logger Way:** Separate the *message* from the *data*.
 
 ```cs
 // GOOD: Clean message, searchable data, zero allocations if Info is muted
-LogManager.Info("Player Damaged", new Dictionary<string, object> 
+ContextLogger.Info("Player Damaged", new Dictionary<string, object> 
 {
     { "PlayerName", playerName },
     { "Damage", damage },

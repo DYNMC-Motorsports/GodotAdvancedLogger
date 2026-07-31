@@ -144,6 +144,7 @@ public partial class LogManager : Node
     }
 
 #nullable enable
+    [Obsolete("Use LogManager.DebugLog instead")]
     public static void Log(
         LogLevel level, 
         string channel,
@@ -152,6 +153,34 @@ public partial class LogManager : Node
         [CallerMemberName] string callerMemberName = "",
         [CallerLineNumber] int callerLineNumber = 0,
         Dictionary<string, object>? context = null, 
+        Exception? ex = null)
+    {
+        if (!IsLevelEnabled(level, channel)) return;
+
+        var entry = new LogEntry(
+            DateTime.Now, 
+            level, channel, 
+            message, 
+            callerFilePath, 
+            callerMemberName, 
+            callerLineNumber, 
+            context, 
+            ex);
+
+        foreach (var writer in Instance._writers)
+        {
+            writer.Write(in entry);
+        }
+    }
+    
+    public static void DebugLog(
+        LogLevel level, 
+        string channel,
+        string message,
+        Dictionary<string, object>? context = null, 
+        [CallerFilePath] string callerFilePath = "",
+        [CallerMemberName] string callerMemberName = "",
+        [CallerLineNumber] int callerLineNumber = 0,
         Exception? ex = null)
     {
         if (!IsLevelEnabled(level, channel)) return;

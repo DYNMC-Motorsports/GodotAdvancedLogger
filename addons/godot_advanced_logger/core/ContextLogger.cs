@@ -13,18 +13,18 @@ public class ContextLogger(string channelName)
 
     public void Info(string message, Dictionary<string, object> context = null,
         [CallerFilePath] string file = "", [CallerMemberName] string member = "", [CallerLineNumber] int line = 0) 
-        => LogManager.Log(LogLevel.Info, ChannelName, message, file, member, line, context, null);
+        => LogManager.DebugLog(LogLevel.Info, ChannelName, message, context, file, member, line, null);
         
     public void Warning(string message, Dictionary<string, object> context = null,
         [CallerFilePath] string file = "", [CallerMemberName] string member = "", [CallerLineNumber] int line = 0) 
-        => LogManager.Log(LogLevel.Warning, ChannelName, message, file, member, line, context, null);
+        => LogManager.DebugLog(LogLevel.Warning, ChannelName, message, context, file, member, line, null);
         
     public void Error(string message, Exception ex = null, Dictionary<string, object> context = null,
         [CallerFilePath] string file = "", [CallerMemberName] string member = "", [CallerLineNumber] int line = 0) 
-        => LogManager.Log(LogLevel.Error, ChannelName, message, file, member, line, context, ex);
+        => LogManager.DebugLog(LogLevel.Error, ChannelName, message, context, file, member, line, ex);
         
     [Conditional("DEBUG")]
     public void Debug(string message, Dictionary<string, object> context = null,
         [CallerFilePath] string file = "", [CallerMemberName] string member = "", [CallerLineNumber] int line = 0) 
-        => LogManager.Log(LogLevel.Debug, ChannelName, message, file, member, line, context, null);
+        => LogManager.DebugLog(LogLevel.Debug, ChannelName, message, context, file, member, line, null);
 }
