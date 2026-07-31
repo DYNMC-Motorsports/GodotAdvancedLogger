@@ -7,10 +7,11 @@ Moving beyond standard `GD.Print` console outputs, this plugin introduces a stan
 ## Key Features
 
 * **Zero-Cost Debugging:** `Debug()` calls utilize C#'s `[Conditional("DEBUG")]` attribute. In your final Release builds, the compiler completely strips these calls, ensuring **zero** CPU overhead and memory allocation.
-* **In-Game Debug Screen:** A toggleable, right-aligned overlay to read logs directly inside your standalone game exports. Fully extensible via the `IDebugPanel` API to add your own custom developer tools.
+* **In-Game Debug Screen:** A toggleable overlay with five built-in tabs: Logs, Console, Watch, Performance and System. Readable directly inside your standalone game exports. Fully extensible via the `IDebugPanel` API to add your own custom developer tools.
+* **In-Game Console:** Register commands from anywhere with `DebugConsole.Register(...)` and run them at a prompt, with history, Tab completion and quoted arguments.
 * **Production Safe:** Automatically detects Release exports (`OS.IsDebugBuild()`) and hard-disables developer tools (like the UI and network writers) while intelligently throttling log verbosity based on separate Editor/Release settings.
 * **Structured Logging:** Stop parsing messy text strings. Send exact data points via C# Dictionaries, making your logs fully searchable and filterable in external tools.
-* **Editor Integration:** Warnings and errors are reported to Godot's error stream, so they show up in **Debugger -> Errors** with a stack trace instead of scrolling past in Output.
+* **Editor Integration:** Warnings and errors are reported to Godot's error stream, so they show up in **Debugger --> Errors** with a stack trace instead of scrolling past in Output.
 * **Multi-Target Output:** Write simultaneously to:
   * Godot Console (with Rich Text BBCode colors)
   * In-Game UI Overlay
@@ -147,72 +148,108 @@ docker run \
 
 *Note: Replace the placeholders `<password>` and `<local path to store data>` with your local settings.*
 
-### In-Game Debug Screen & Custom Panels
+### In-Game Debug Screen
 
-The plugin ships with a built-in `DebugScreen` Autoload. By default, pressing `F12` opens a side-panel displaying your real-time logs with channel and level filtering, plus **Clear** and **Copy visible** buttons — the latter puts the currently filtered log text on the clipboard, ready to paste into a bug report.
+The plugin ships with a `DebugScreen` autoload. Press `F12` (configurable) to open a tabbed
+overlay with five built-in panels:
 
-You can easily add your own debug tabs (e.g., a "Performance" or "Entity Inspector" tab) by implementing the `IDebugPanel` interface:
+| Tab | What it does |
+|---|---|
+| **Logs** | Live log view with search, level/channel filters, Clear, Copy and Save-to-file |
+| **Console** | Command prompt for commands you register yourself |
+| **Watch** | Live table of values you register with one line of code |
+| **Performance** | FPS, frame timing, memory, draw calls, node counts, frame-time sparkline |
+| **System** | Engine / OS / CPU / GPU / renderer details, with a Copy button for bug reports |
+
+Use **Wide** in the header to expand the overlay from the right 40% to the full viewport.
+
+The overlay is disabled in release exports unless you set `ingame_ui_allow_in_release`, and
+it can pause the game while open via `ingame_ui_pause_game`.
+
+#### Watch a value
+
+```csharp
+DebugScreen.Instance?.Watch("Player HP", () => _player.Health);
+DebugScreen.Instance?.Watch("Enemies",   () => _enemies.Count);
+```
+
+Providers are polled about ten times a second while the Watch tab is visible. One that
+throws shows the exception inline instead of taking down the overlay.
+
+#### Register a console command
+
+`DebugConsole` is static, so you can register from anywhere at any time, it does not care
+whether the overlay exists yet.
+
+```csharp
+DebugConsole.Register("give_gold", args =>
+{
+    if (args.Length < 1 || !int.TryParse(args[0], out int amount))
+        return "usage: give_gold <amount>";
+
+    Player.Gold += amount;
+    return $"Gave {amount} gold.";
+}, "Adds gold to the player", "give_gold <amount>");
+```
+
+Tab completes command names, Up/Down walk the history, and quoted arguments
+(`say "hello world"`) are parsed as one argument. Built-ins include `help`, `clear`,
+`loglevel`, `mute`/`unmute`, `channels`, `panels`/`panel`, `logtest` and `quit`.
+
+#### Add your own tab
+
+Implement `IDebugPanel`, a plain C# class, not a `Node` and not `partial`:
 
 ```csharp
 using Godot;
 using GodotAdvancedLogger.addons.godot_advanced_logger.core.ui;
 
-public class PerformanceDebugPanel : IDebugPanel
+public class EntityInspectorPanel : IDebugPanel
 {
-    private Label _fpsLabel;
+    private Label _infoLabel;
 
-    // 1. The name displayed on the UI tab
-    public string PanelName => "Performance";
+    // 1. The name displayed on the UI tab. Must be unique.
+    public string PanelName => "Entities";
 
-    // 2. Build your custom UI using standard Godot Controls
+    // 2. Build your UI using standard Godot Controls. Called once, at registration.
     public Control GetPanelUi()
     {
         var container = new VBoxContainer();
-
-        var title = new Label { Text = "Game Performance Metrics" };
-        container.AddChild(title);
-        
+        container.AddChild(new Label { Text = "Entity Inspector" });
         container.AddChild(new HSeparator());
 
-        _fpsLabel = new Label { Text = "FPS: Calculating..." };
-        container.AddChild(_fpsLabel);
+        _infoLabel = new Label { Text = "Waiting for data..." };
+        container.AddChild(_infoLabel);
 
         return container;
     }
 
-    // 3. Update logic (called every frame ONLY while this specific tab is visible)
+    // 3. Called every frame, but ONLY while this tab is active and the overlay is open.
     public void OnPanelUpdate(float delta)
     {
-        if (_fpsLabel != null)
-        {
-            _fpsLabel.Text = $"FPS: {Engine.GetFramesPerSecond()}";
-        }
+        _infoLabel.Text = $"Tracked entities: {EntityManager.Count}";
     }
 
     // Optional lifecycle hooks
-    public void OnPanelShow() 
-    { 
-        GD.Print("Performance panel opened."); 
-    }
-    
+    public void OnPanelShow() { }
     public void OnPanelHide() { }
 }
 ```
 
-To make your panel appear in the game, simply register it once anywhere in your code (for example, in the `_Ready` method of your main scene or a custom autoload):
+Register it once, for example in the `_Ready` of your main scene:
 
 ```csharp
-if (DebugScreen.Instance != null)
-{
-    DebugScreen.Instance.RegisterDebugPanel(new PerformanceDebugPanel());
-}
+DebugScreen.Instance?.RegisterDebugPanel(new EntityInspectorPanel());
 ```
 
-Panels can also be removed again — useful when a panel belongs to a scene that unloads:
+And remove it again when the owning scene unloads:
 
 ```csharp
-DebugScreen.Instance?.UnregisterDebugPanel("Performance");
+DebugScreen.Instance?.UnregisterDebugPanel("Entities");
 ```
+
+See [DEBUGSCREEN_GUIDE.md](addons/godot_advanced_logger/DEBUGSCREEN_GUIDE.md) for the full
+reference.
 
 ## Log files
 

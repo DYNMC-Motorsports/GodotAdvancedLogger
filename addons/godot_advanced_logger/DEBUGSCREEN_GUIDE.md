@@ -1,323 +1,205 @@
-# DebugScreen - Additional Guide
+# DebugScreen — Guide
 
 ## Overview
 
-The `DebugScreen` is the in-game debug overlay for this logging plugin. It is designed as a panel-based UI that lets you inspect logs and build custom debugging tools while the game is running.
+The `DebugScreen` is the in-game debug overlay. It is a `CanvasLayer` autoload registered by
+the plugin, hidden at startup, and toggled with **F12** (or whatever key you set in Project
+Settings).
 
-The overlay is implemented as a `CanvasLayer` autoload and can be toggled with **F12**. By default, it starts hidden and shows a tabbed interface on the right side of the screen.
+The overlay is a tabbed shell. Every tab is an `IDebugPanel`. Five panels ship with the
+plugin, and you can add your own.
 
-## Key Features
+| Tab             | What it does                                                                    |
+|-----------------|---------------------------------------------------------------------------------|
+| **Logs**        | Live log view with search, level and channel filters, clipboard and file export |
+| **Console**     | Command prompt for commands you register with `DebugConsole`                    |
+| **Watch**       | Live table of values registered with `DebugScreen.Instance.Watch(...)`          |
+| **Performance** | FPS, frame timing, memory, draw calls, node counts, frame-time sparkline        |
+| **System**      | Engine / OS / CPU / GPU / renderer details, with a Copy button for bug reports  |
 
-- **Tabbed panel system**: Multiple debug panels can live inside one shared overlay.
-- **Extensible by design**: Add your own panels by implementing `IDebugPanel`.
-- **Log filtering**: The built-in Logs panel can filter by log level and channel.
-- **Color-coded output**: Log entries are colorized by severity.
-- **Main-thread UI updates**: Log entries are queued and processed safely on the main thread.
-- **Automatic log routing**: The logging pipeline includes a `DebugScreenWriter` so logs can appear in the overlay automatically when the screen exists.
+## Shell controls
 
-## Default Panel: Logs
+* **Wide / Narrow**: the overlay covers the right 40% of the viewport by default. *Wide*
+  expands it to the full viewport, which is what you want for reading long log lines or
+  wide stack traces.
+* **Close**: hides the overlay. The hotkey does the same thing.
+* The active tab is visibly highlighted, and Godot's `TabContainer` gives you keyboard
+  navigation between tabs for free.
 
-The built-in `Logs` panel shows log entries produced by the logging system.
+## Project settings
 
-### What it provides
+Under **Project Settings → General → Addons → Godot Advanced Logger → Settings**:
 
-- Auto-scrolling log output
-- Toggle filters for individual log levels
-- Toggle filters for individual channels
-- A capped history of **1000 lines** to prevent unbounded memory growth
-- Rich text formatting with timestamps, levels, channels, and messages
+| Setting                      | Default | Effect                                             |
+|------------------------------|---------|----------------------------------------------------|
+| `ingame_ui_hotkey`           | `F12`   | Key that toggles the overlay. Any `Key` enum name. |
+| `ingame_ui_pause_game`       | `false` | Pauses the `SceneTree` while the overlay is open.  |
+| `ingame_ui_allow_in_release` | `false` | Lets the overlay open in release exports.          |
 
-### Filtering behavior
+### A note on input
 
-- When a new channel appears, it is added to the channel filter list automatically.
-- By default, newly discovered channels and all log levels are enabled.
-- Changing any filter rebuilds the visible log output from the stored history.
+The overlay swallows mouse clicks over its own area, and while a text field inside it has
+focus Godot's GUI consumes key events before they reach `_unhandled_input`.
 
-## How logging reaches the overlay
+What it cannot intercept is **polling**. Code calling `Input.IsActionPressed(...)` every
+frame runs regardless of what has focus, so your player will still move while you type into
+the console. If that bothers you, enable `ingame_ui_pause_game`. The overlay keeps updating
+while paused (its `ProcessMode` is `Always`), and closing it restores whatever pause state
+the game had before, so it will not stomp your own pause menu.
 
-The `LogManager` registers the default writers during initialization, including the `DebugScreenWriter`. That writer forwards log entries to `DebugScreen.EnqueueLog(entry)` if the debug overlay is available.
+The hotkey is handled in `_ShortcutInput`, so it fires even when the console input has
+focus. If you set the hotkey to a plain letter, it is ignored while you are typing into a
+text field, otherwise you could never type that letter.
 
-In practice, this means you can continue using the plugin's normal `ContextLogger` or `LogManager` flow, and the overlay will display the same logs without additional integration work.
+### Release builds
 
-Example:
+The overlay is a developer tool, so it is disabled in release exports unless you set
+`ingame_ui_allow_in_release`. This matches how `LogManager` gates Seq and the overlay
+writer. Note these are two separate switches: `writers/enable_overlay` controls whether logs
+are *routed* to the overlay, `ingame_ui_allow_in_release` controls whether the overlay
+*exists* at all in a release build.
+
+## The Logs panel
+
+* **Search**: Substring match, case-insensitive, applied on top of the level and channel
+  filters. It searches the whole rendered line, so channel names and context values match too.
+* **Follow**: Auto-scroll to the newest entry. Scrolling up by hand turns it off
+  automatically so the view stops fighting you; click it again to jump back to the bottom.
+* **Clear / Copy / Save**: Copy puts the currently visible entries on the clipboard as
+  plain text. Save writes them to `user://logs/godotadvancedlogger/export_<timestamp>.txt`
+  and reports the absolute path in the status line.
+* **Channels**: Discovered automatically as entries arrive, listed alphabetically, with
+  **All** / **None** buttons.
+* History is capped at 1000 entries; the status line shows how many are shown vs buffered.
+
+## The Console panel
+
+Register a command from anywhere. `DebugConsole` is static and does not care whether the
+overlay exists yet:
 
 ```csharp
-private readonly ContextLogger _logger = new ContextLogger("Combat");
+using GodotAdvancedLogger.addons.godot_advanced_logger.core.ui;
 
-_logger.Info("Player entered combat", new Dictionary<string, object>
+DebugConsole.Register("give_gold", args =>
 {
-    { "EnemyCount", 3 },
-    { "Area", "Arena" }
-});
+    if (args.Length < 1 || !int.TryParse(args[0], out int amount))
+        return "usage: give_gold <amount>";
+
+    Player.Gold += amount;
+    return $"Gave {amount} gold. Player now has {Player.Gold}.";
+},
+description: "Adds gold to the player",
+usage: "give_gold <amount>");
 ```
 
-## Creating Custom Panels
+The handler receives already-parsed arguments and returns the text to print (return `null`
+to print nothing). Exceptions thrown by a handler are caught and shown in the console rather
+than crashing the game.
 
-Custom panels are created by implementing `IDebugPanel` and registering the panel instance with the `DebugScreen`.
+Arguments are split on whitespace, and double quotes group a single argument:
+`say "hello world"` passes one argument, not two.
 
-### Step 1: Implement `IDebugPanel`
+At the prompt: **Tab** completes command names, **Up / Down** walk the history.
+
+### Built-in commands
+
+| Command                               | Description                                                      |
+|---------------------------------------|------------------------------------------------------------------|
+| `help [command]`                      | List commands, or show details for one                           |
+| `clear`                               | Clear the console output                                         |
+| `quit`                                | Close the game                                                   |
+| `loglevel [level]`                    | Show or set the minimum log level at runtime                     |
+| `mute <channel>` / `unmute <channel>` | Silence or restore a channel                                     |
+| `channels`                            | List every channel seen this session                             |
+| `panels` / `panel <name>`             | List panels, or switch to one                                    |
+| `logtest`                             | Emit one entry at each level, to check your writers are wired up |
+
+## The Watch panel
+
+For values you want to see continuously without writing a panel:
+
+```csharp
+DebugScreen.Instance?.Watch("Player HP",  () => _player.Health);
+DebugScreen.Instance?.Watch("Enemies",    () => _enemies.Count);
+DebugScreen.Instance?.Watch("State",      () => _stateMachine.CurrentState);
+DebugScreen.Instance?.Watch("Position",   () => _player.GlobalPosition);
+```
+
+Providers are polled about ten times a second while the panel is visible, so keep them
+cheap. A provider that throws — a freed node, a null field — shows the exception inline
+instead of taking down the overlay.
+
+`Unwatch(label)` removes one; `ClearWatches()` removes all. Registering the same label twice
+replaces the provider rather than adding a duplicate row.
+
+## Writing a custom panel
+
+Implement `IDebugPanel`. Note it is a plain C# class, **not** `partial`, and not a `Node`.
+You build and return a Godot `Control` from `GetPanelUi()`, and the overlay parents it.
 
 ```csharp
 using Godot;
+using GodotAdvancedLogger.addons.godot_advanced_logger.core.ui;
 
-public partial class MyCustomPanel : IDebugPanel
-{
-    private Label _statusLabel;
-
-    public string PanelName => "My Panel";
-
-    public void OnPanelShow()
-    {
-        // Called when this panel becomes visible.
-    }
-
-    public void OnPanelHide()
-    {
-        // Called when this panel is hidden.
-    }
-
-    public void OnPanelUpdate(float delta)
-    {
-        // Called every frame while the panel is visible.
-        // Keep this lightweight.
-    }
-
-    public Control GetPanelUi()
-    {
-        var container = new VBoxContainer();
-        _statusLabel = new Label { Text = "Waiting for data..." };
-        container.AddChild(_statusLabel);
-        return container;
-    }
-}
-```
-
-### Step 2: Register the panel
-
-Register the panel from initialization code, for example in `_Ready()`:
-
-```csharp
-var myPanel = new MyCustomPanel();
-DebugScreen.Instance.RegisterDebugPanel(myPanel);
-```
-
-### Panel registration rules
-
-- `PanelName` must be unique.
-- If a panel with the same name already exists, the registration attempt is ignored.
-- `GetPanelUi()` is called when the panel is registered, not every frame.
-- If `GetPanelUi()` returns `null`, the tab still exists, but no custom UI is shown.
-
-## Example Panels
-
-### Example 1: Hover unit information
-
-This pattern is useful for strategy games or entity-heavy games where you want to inspect the object under the mouse.
-
-```csharp
-using Godot;
-
-public partial class HoverUnitInfoPanel : IDebugPanel
+public class HoverUnitInfoPanel : IDebugPanel
 {
     private Label _infoLabel;
     private Unit _hoveredUnit;
 
+    // 1. The tab title. Must be unique.
     public string PanelName => "Unit Info";
 
-    public void OnPanelShow()
-    {
-        // Connect signals or begin tracking state here.
-    }
-
-    public void OnPanelHide()
-    {
-        // Disconnect signals or stop tracking state here.
-    }
-
-    public void OnPanelUpdate(float delta)
-    {
-        var mousePos = GetGlobalMousePosition();
-        _hoveredUnit = FindUnitAtPosition(mousePos);
-
-        if (_hoveredUnit != null)
-        {
-            _infoLabel.Text = $"Unit: {_hoveredUnit.Name}\n" +
-                              $"HP: {_hoveredUnit.Health}/{_hoveredUnit.MaxHealth}\n" +
-                              $"Morale: {_hoveredUnit.Morale}";
-        }
-        else
-        {
-            _infoLabel.Text = "Hover over a unit...";
-        }
-    }
-
+    // 2. Build the UI. Called once, when the panel is registered.
     public Control GetPanelUi()
     {
         var container = new VBoxContainer();
-        _infoLabel = new Label { Text = "Waiting for data..." };
+        _infoLabel = new Label { Text = "Hover over a unit..." };
         container.AddChild(_infoLabel);
         return container;
     }
 
-    private Unit FindUnitAtPosition(Vector2 pos)
-    {
-        // Replace with your own selection / raycast logic.
-        return null;
-    }
-}
-```
-
-### Example 2: Performance panel
-
-```csharp
-using Godot;
-
-public partial class PerformanceDebugPanel : IDebugPanel
-{
-    private Label _statsLabel;
-
-    public string PanelName => "Performance";
-
-    public void OnPanelShow() { }
-    public void OnPanelHide() { }
-
+    // 3. Called every frame, but only while this tab is the active one AND the
+    //    overlay is open. Panels that are not visible cost nothing.
     public void OnPanelUpdate(float delta)
     {
-        double fps = Engine.GetFramesPerSecond();
-        ulong memory = GD.GetStaticMemoryUsage();
+        _hoveredUnit = FindUnitAtPosition(GetGlobalMousePosition());
 
-        _statsLabel.Text = $"FPS: {fps}\n" +
-                           $"Memory: {memory / 1024 / 1024} MB\n" +
-                           $"Nodes: {GetTree().NodeCount}";
+        _infoLabel.Text = _hoveredUnit != null
+            ? $"Unit: {_hoveredUnit.Name}\nHP: {_hoveredUnit.Health}/{_hoveredUnit.MaxHealth}"
+            : "Hover over a unit...";
     }
 
-    public Control GetPanelUi()
-    {
-        var container = new VBoxContainer();
-        _statsLabel = new Label { Text = "Loading..." };
-        container.AddChild(_statsLabel);
-        return container;
-    }
-}
-```
-
-### Example 3: Game state overview
-
-```csharp
-using Godot;
-
-public partial class GameStatesPanel : IDebugPanel
-{
-    private ItemList _statesList;
-
-    public string PanelName => "Game States";
-
-    public Control GetPanelUi()
-    {
-        var container = new VBoxContainer();
-        container.AddChild(new Label { Text = "Current Game States" });
-
-        _statesList = new ItemList { CustomMinimumSize = new Vector2(0, 300) };
-        container.AddChild(_statesList);
-
-        return container;
-    }
-
-    public void OnPanelUpdate(float delta)
-    {
-        _statesList.Clear();
-
-        // Replace these with real game state values.
-        _statesList.AddItem("GameMode: Combat");
-        _statesList.AddItem("Paused: false");
-        _statesList.AddItem("Current Level: 5");
-        _statesList.AddItem("Player Position: (100, 50)");
-    }
-
+    // 4. Lifecycle hooks - good places to subscribe / unsubscribe.
     public void OnPanelShow() { }
     public void OnPanelHide() { }
 }
 ```
 
-## Keyboard Shortcut
-
-- **F12**: Toggle the `DebugScreen` overlay on and off.
-
-## API Reference
-
-### `DebugScreen`
+Register it once, for example in your main scene's `_Ready()`:
 
 ```csharp
-// Register a custom debug panel.
-DebugScreen.Instance.RegisterDebugPanel(panel);
-
-// Show a panel by name. If it is already visible, switch to it.
-DebugScreen.Instance.ShowPanel("PanelName");
-
-// Get a registered panel by name.
-IDebugPanel panel = DebugScreen.Instance.GetPanel("PanelName");
-
-// Get the built-in Logs panel.
-LogsDebugPanel logsPanel = DebugScreen.Instance.GetLogsPanel();
-
-// Enqueue a log entry for the overlay.
-DebugScreen.Instance.EnqueueLog(entry);
+DebugScreen.Instance?.RegisterDebugPanel(new HoverUnitInfoPanel());
 ```
 
-### `IDebugPanel`
+And remove it again when the owning scene unloads:
 
 ```csharp
-public interface IDebugPanel
-{
-    string PanelName { get; }
-    void OnPanelShow();
-    void OnPanelHide();
-    void OnPanelUpdate(float delta);
-    Control GetPanelUi();
-}
+DebugScreen.Instance?.UnregisterDebugPanel("Unit Info");
 ```
 
-## Best Practices
+### Registration rules
 
-1. **Keep `OnPanelUpdate()` light**
-   - It runs every frame while the panel is visible.
-   - Avoid expensive scene queries or heavy UI rebuilding.
+* `PanelName` must be unique. Registering a name that already exists is a no-op.
+* `GetPanelUi()` is called once, at registration — not every frame.
+* If `GetPanelUi()` returns `null`, the tab is still created with an empty placeholder.
+* Panel names may contain characters Godot forbids in node names (`. : @ / " %`); the node
+  name is sanitized while the tab keeps your original text.
 
-2. **Use `OnPanelShow()` and `OnPanelHide()` for setup and cleanup**
-   - Connect and disconnect signals here.
-   - Allocate and free temporary resources here if needed.
+### Performance notes
 
-3. **Use unique panel names**
-   - The tab label comes from `PanelName`.
-   - Duplicate names will not register twice.
+`OnPanelUpdate` only runs for the **active** tab of an **open** overlay, so a panel that is
+not being looked at costs nothing. Do expensive work there rather than in `_Process`
+somewhere else.
 
-4. **Update UI on the main thread**
-   - Godot controls should be created and modified from the main thread.
-   - If you are collecting data from other threads, pass it to the panel safely first.
-
-5. **Prefer the logging pipeline for log output**
-   - Use `ContextLogger` / `LogManager` for normal logging.
-   - Use `EnqueueLog()` only when you need to push an entry directly into the overlay.
-
-6. **Keep the overlay focused**
-   - Use the built-in Logs panel for log inspection.
-   - Add custom panels only for information that is useful during development or debugging.
-
-## Notes and Common Pitfalls
-
-- `GetPanelUi()` is the correct method name in this codebase.
-- `EnqueueLog()` is the correct method name on `DebugScreen`.
-- The overlay is hidden by default and must be opened with **F12** or shown programmatically.
-- The `Logs` panel is created automatically when `DebugScreen` initializes.
-
-## Minimal Usage Example
-
-```csharp
-public override void _Ready()
-{
-    var panel = new MyCustomPanel();
-    DebugScreen.Instance.RegisterDebugPanel(panel);
-}
-```
-
-That is all you need for a basic custom panel. Once registered, it appears as a tab next to the built-in `Logs` panel.
+Log entries reach the overlay through a thread-safe queue; at most 200 are moved into the UI
+per frame (buffering up to 5000) so a logging burst cannot stall a frame.
