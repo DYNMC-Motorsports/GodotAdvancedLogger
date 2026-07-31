@@ -178,6 +178,19 @@ public partial class LogManager : Node
     public void MuteChannel(string channel) => _mutedChannels.Add(channel);
     public void UnmuteChannel(string channel) => _mutedChannels.Remove(channel);
 
+    /// <summary>Whether <paramref name="channel"/> is currently muted (case-insensitive).</summary>
+    public bool IsChannelMuted(string channel) => channel != null && _mutedChannels.Contains(channel);
+
+    /// <summary>
+    /// Minimum level that will be written. Loaded from Project Settings at startup and
+    /// adjustable at runtime - the in-game console exposes this as the <c>loglevel</c> command.
+    /// </summary>
+    public LogLevel MinLogLevel
+    {
+        get => _minLogLevel;
+        set => _minLogLevel = value;
+    }
+
     public static bool IsLevelEnabled(LogLevel level, string channel)
     {
         if (Instance == null || !Instance.IsGlobalEnabled) return false;

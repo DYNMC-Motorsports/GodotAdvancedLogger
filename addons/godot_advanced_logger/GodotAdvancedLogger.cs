@@ -16,6 +16,8 @@ public partial class GodotAdvancedLogger : EditorPlugin
     private const string SettingLogLevel = "addons/godot_advanced_logger/settings/min_log_level";
     private const string SettingOverlayToggleHotkey = "addons/godot_advanced_logger/settings/ingame_ui_hotkey";
     private const string SettingLogLevelRelease = "addons/godot_advanced_logger/settings/min_log_level_release";
+    private const string SettingOverlayPauseGame = "addons/godot_advanced_logger/settings/ingame_ui_pause_game";
+    private const string SettingOverlayAllowInRelease = "addons/godot_advanced_logger/settings/ingame_ui_allow_in_release";
     
     private const string SettingEnableOverlay = "addons/godot_advanced_logger/writers/enable_overlay";
     private const string SettingEnableConsole = "addons/godot_advanced_logger/writers/enable_console";
@@ -41,6 +43,12 @@ public partial class GodotAdvancedLogger : EditorPlugin
         AddCustomProjectSetting(SettingOverlayToggleHotkey, "F12", Variant.Type.String);
         AddCustomProjectSetting(SettingLogLevel, 0, Variant.Type.Int, PropertyHint.Enum, "Debug,Info,Warning,Error");
         AddCustomProjectSetting(SettingLogLevelRelease, 1, Variant.Type.Int, PropertyHint.Enum, "Debug,Info,Warning,Error");
+
+        // Overlay behaviour
+        AddCustomProjectSetting(SettingOverlayPauseGame, false, Variant.Type.Bool, PropertyHint.None,
+            "Pause the SceneTree while the debug overlay is open");
+        AddCustomProjectSetting(SettingOverlayAllowInRelease, false, Variant.Type.Bool, PropertyHint.None,
+            "Allow the debug overlay to be opened in release exports");
         
         // Writer Toggles 
         AddCustomProjectSetting(SettingEnableOverlay, true, Variant.Type.Bool);
