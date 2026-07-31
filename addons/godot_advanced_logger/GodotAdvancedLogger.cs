@@ -36,7 +36,7 @@ public partial class GodotAdvancedLogger : EditorPlugin
         AddAutoloadSingleton(AutoloadName, AutoloadPath);
         AddAutoloadSingleton(AutoloadNameOverlay, AutoloadPathOverlay);
         
-        // Globale Settings
+        // Global Settings
         AddCustomProjectSetting(SettingMutedChannels, "", Variant.Type.String, PropertyHint.None, "Comma separated list (e.g. Physics, AI)");
         AddCustomProjectSetting(SettingOverlayToggleHotkey, "F12", Variant.Type.String);
         AddCustomProjectSetting(SettingLogLevel, 0, Variant.Type.Int, PropertyHint.Enum, "Debug,Info,Warning,Error");
@@ -60,6 +60,7 @@ public partial class GodotAdvancedLogger : EditorPlugin
     public override void _ExitTree()
     {
         RemoveAutoloadSingleton(AutoloadName);
+        RemoveAutoloadSingleton(AutoloadNameOverlay);
         GD.Print($"{AutoloadName} unloaded.");
     }
     
