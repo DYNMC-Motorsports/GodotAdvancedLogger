@@ -6,5 +6,13 @@
   </PropertyGroup>
   <ItemGroup>
     <Content Include="addons\godot_advanced_logger\DEBUGSCREEN_GUIDE.md" />
+    <Content Include="addons\godot_advanced_logger\examples\gdscript\GdScriptExample.tscn" />
+    <Content Include="addons\godot_advanced_logger\examples\gdscript\GdScriptExampleScene.gd" />
+    <Content Include="addons\godot_advanced_logger\examples\gdscript\GdScriptExampleScene.gd.uid" />
+    <Content Include="addons\godot_advanced_logger\gdscript\GodotLogger.gd" />
+    <Content Include="addons\godot_advanced_logger\gdscript\GodotLogger.gd.uid" />
+    <Content Include="addons\godot_advanced_logger\gdscript\GodotLoggerBridge.gd" />
+    <Content Include="addons\godot_advanced_logger\gdscript\GodotLoggerBridge.gd.uid" />
+    <Content Include="README.md" />
   </ItemGroup>
 </Project>

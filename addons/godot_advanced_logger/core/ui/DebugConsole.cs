@@ -65,6 +65,35 @@ public static class DebugConsole
         };
     }
 
+    /// <summary>
+    /// Registers a command backed by a <see cref="Callable"/>.
+    /// </summary>
+    /// <param name="handler">
+    /// Receives a single <c>Array</c> of string arguments and returns the text to print;
+    /// return nothing to print nothing.
+    /// </param>
+    /// <remarks>
+    /// Must be a callable C# marshalling can represent: an object + method pair, or one
+    /// built from a C# delegate via <c>Callable.From(...)</c>. A GDScript lambda or a
+    /// <c>bind()</c>ed callable is a <i>custom</i> callable and arrives here empty, failing
+    /// at call time with "Attempt to call callable 'null::null' on a null instance".
+    /// GDScript callers should use <c>GodotLogger.register_command(...)</c>, which routes
+    /// around this.
+    /// </remarks>
+    public static void Register(string name, Callable handler, string description = "", string usage = "")
+    {
+        if (string.IsNullOrWhiteSpace(name)) return;
+
+        Register(name, args =>
+        {
+            var gdArgs = new Godot.Collections.Array();
+            foreach (string arg in args) gdArgs.Add(arg);
+
+            Variant result = handler.Call(gdArgs);
+            return result.VariantType == Variant.Type.Nil ? null : result.ToString();
+        }, description, usage);
+    }
+
     /// <summary>Removes a command.</summary>
     public static bool Unregister(string name)
         => !string.IsNullOrEmpty(name) && Registry.Remove(name);
@@ -77,10 +106,12 @@ public static class DebugConsole
     {
         prefix ??= string.Empty;
 
-        return Registry.Keys
-            .Where(k => k.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-            .OrderBy(k => k, StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        return
+        [
+            .. Registry.Keys
+                .Where(k => k.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(k => k, StringComparer.OrdinalIgnoreCase)
+        ];
     }
 
     /// <summary>
@@ -91,6 +122,7 @@ public static class DebugConsole
     public static string Execute(string line) => Execute(line, out _);
 
     /// <inheritdoc cref="Execute(string)"/>
+    /// <param name="line"/>inputted command
     /// <param name="isError">
     /// <c>true</c> when the command was unknown or its handler threw, so a caller can
     /// render the result differently from ordinary output.
