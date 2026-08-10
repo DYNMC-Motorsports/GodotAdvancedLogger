@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://bbfmwknfldgcx"]
+
+[ext_resource type="Script" uid="uid://chnubxvnitkr" path="res://addons/godot_advanced_logger/examples/gdscript/GdScriptExampleScene.gd" id="1_gdlog"]
+
+[node name="GdScriptExample" type="Node" unique_id=385109860]
+script = ExtResource("1_gdlog")

@@ -318,6 +318,69 @@ public partial class LogManager : Node
         => Write(level, channel, message, context, ex, callerFilePath, callerMemberName, callerLineNumber);
 #nullable restore
 
+    // ---------------------------------------------------------------------
+    // GDScript bridge
+    // ---------------------------------------------------------------------
+    //
+    // GDScript can only call methods whose parameters are all Variant-marshallable, and it
+    // cannot call static methods at all, but it can call public instance methods of the LogManager.
+    // These are the entry points the GodotLogger.gd facade forwards to;
+    // they are not meant to be called from C#.
+    //
+    // LogLevel crosses as int and context as a Godot Dictionary. Caller file, member and
+    // line are passed explicitly because [CallerFilePath] and friends are filled in by the
+    // C# compiler at the call site, and GDScript has no equivalent - the facade supplies
+    // them from get_stack() instead.
+
+    /// <summary>
+    /// GDScript entry point. Prefer <c>GodotLogger.info(...)</c> over calling this directly.
+    /// </summary>
+    /// <param name="level">A <see cref="LogLevel"/> as an integer.</param>
+    /// <param name="channel">Channel tag; empty falls back to <see cref="DefaultChannel"/>.</param>
+    /// <param name="message">The log message.</param>
+    /// <param name="context">Structured data, or an empty dictionary.</param>
+    /// <param name="file">Calling script path, from <c>get_stack()</c>.</param>
+    /// <param name="member">Calling function name, from <c>get_stack()</c>.</param>
+    /// <param name="line">Calling line number, from <c>get_stack()</c>.</param>
+    public void GdWrite(int level, string channel, string message,
+        Godot.Collections.Dictionary context, string file, string member, int line)
+    {
+        if (!Enum.IsDefined(typeof(LogLevel), level)) return;
+
+        var logLevel = (LogLevel)level;
+        string resolvedChannel = string.IsNullOrEmpty(channel) ? DefaultChannel : channel;
+
+        // Gate before converting the dictionary, so a muted channel costs nothing beyond
+        // this comparison even if a caller reached this method without checking first.
+        if (!IsLevelEnabled(logLevel, resolvedChannel)) return;
+
+        Write(logLevel,
+            resolvedChannel,
+            message ?? string.Empty,
+            VariantConverter.ToContext(context),
+            null,
+            file ?? string.Empty,
+            member ?? string.Empty,
+            line);
+    }
+
+    /// <summary>GDScript entry point for the level gate.</summary>
+    public bool GdIsEnabled(int level, string channel)
+    {
+        if (!Enum.IsDefined(typeof(LogLevel), level)) return false;
+
+        return IsLevelEnabled((LogLevel)level, string.IsNullOrEmpty(channel) ? DefaultChannel : channel);
+    }
+
+    /// <summary>GDScript entry point: the current minimum level, as an integer.</summary>
+    public int GdGetMinLevel() => (int)_minLogLevel;
+
+    /// <summary>GDScript entry point: sets the minimum level from an integer.</summary>
+    public void GdSetMinLevel(int level)
+    {
+        if (Enum.IsDefined(typeof(LogLevel), level)) _minLogLevel = (LogLevel)level;
+    }
+
     private void Shutdown()
     {
         writers.ILogWriter[] snapshot;

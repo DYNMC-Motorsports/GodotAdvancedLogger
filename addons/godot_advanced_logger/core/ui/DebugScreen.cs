@@ -570,6 +570,48 @@ public partial class DebugScreen : CanvasLayer
     public void ClearWatches() => _watchPanel?.Clear();
 
     // ---------------------------------------------------------------------
+    // GDScript bridge
+    // ---------------------------------------------------------------------
+    //
+    // GDScript cannot call static methods or pass a Func<object>, but it can call public
+    // instance methods on an autoload node. Unwatch, ClearWatches, ShowPanel, Open, Close
+    // and Toggle already take Variant-marshallable parameters and are callable as they are;
+
+    /// <summary>
+    /// GDScript entry point for registering a console command.
+    /// </summary>
+    /// <param name="handler">
+    /// A plain object+method callable on the GDScript relay, invoked as
+    /// <c>handler(name, args)</c>. It is deliberately not the user's own callable: a
+    /// GDScript lambda is a custom callable that cannot survive marshalling into
+    /// <see cref="Callable"/> and would arrive here as an empty <c>null::null</c>.
+    /// See <c>GodotLoggerBridge.gd</c>.
+    /// </param>
+    public void GdRegisterCommand(string name, Callable handler, string description, string usage)
+    {
+        DebugConsole.Register(name, args =>
+        {
+            var gdArgs = new Godot.Collections.Array();
+            foreach (string arg in args) gdArgs.Add(arg);
+
+            // The name goes back across so the relay knows which handler to dispatch to.
+            Variant result = handler.Call(name, gdArgs);
+            return result.VariantType == Variant.Type.Nil ? null : result.ToString();
+        }, description, usage);
+    }
+
+    /// <summary>
+    /// GDScript entry point for <see cref="Watch"/>.
+    /// </summary>
+    /// <param name="label">Row label, also passed to <paramref name="provider"/> on each poll.</param>
+    /// <param name="provider">
+    /// A plain object+method callable on the GDScript relay, invoked as
+    /// <c>provider(label)</c>. As above, the user's own lambda cannot cross the boundary.
+    /// </param>
+    public void GdWatch(string label, Callable provider)
+        => _watchPanel?.Add(label, () => VariantConverter.ToObject(provider.Call(label)));
+
+    // ---------------------------------------------------------------------
     // Accessors
     // ---------------------------------------------------------------------
 

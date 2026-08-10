@@ -1,6 +1,6 @@
-# Godot Advanced Logger (C#)
+# Godot Advanced Logger (C# & GDScript)
 
-Godot Advanced Logger is a robust, high-performance, and structured logging framework designed specifically for Godot 4.x C# projects. 
+Godot Advanced Logger is a robust, high-performance, and structured logging framework for Godot 4.x .NET projects, usable from both C# and GDScript. 
 
 Moving beyond standard `GD.Print` console outputs, this plugin introduces a standard logging architecture. It is built from the ground up to prevent garbage collector spikes (Zero-Allocation), support structured data (JSON), stream logs in real-time to external dashboards like Seq, and provide a fully extensible **In-Game Debug UI**.
 
@@ -9,6 +9,7 @@ Moving beyond standard `GD.Print` console outputs, this plugin introduces a stan
 * **Zero-Cost Debugging:** `Debug()` calls utilize C#'s `[Conditional("DEBUG")]` attribute. In your final Release builds, the compiler completely strips these calls, ensuring **zero** CPU overhead and memory allocation.
 * **In-Game Debug Screen:** A toggleable overlay with five built-in tabs: Logs, Console, Watch, Performance and System. Readable directly inside your standalone game exports. Fully extensible via the `IDebugPanel` API to add your own custom developer tools.
 * **In-Game Console:** Register commands from anywhere with `DebugConsole.Register(...)` and run them at a prompt, with history, Tab completion and quoted arguments.
+* **GDScript Support:** A `GodotLogger` facade exposes logging, channel muting, console commands and the Watch panel to GDScript, with caller file and line resolved from the GDScript stack.
 * **Production Safe:** Automatically detects Release exports (`OS.IsDebugBuild()`) and hard-disables developer tools (like the UI and network writers) while intelligently throttling log verbosity based on separate Editor/Release settings.
 * **Structured Logging:** Stop parsing messy text strings. Send exact data points via C# Dictionaries, making your logs fully searchable and filterable in external tools.
 * **Editor Integration:** Warnings and errors are reported to Godot's error stream, so they show up in **Debugger --> Errors** with a stack trace instead of scrolling past in Output.
@@ -39,6 +40,7 @@ Here you can:
 * Mute noisy channels.
 * Enable/Disable specific Writers (Console, File, JSON, Seq, In-Game UI).
 * Configure the In-Game UI toggle hotkey (defaults to `F12`).
+* **IMPORTANT:** If using GDScript, make sure the `_BRIDGE_SCRIPT` path is correctly set to `addons/godot_advanced_logger/core/GodotLogger.cs` (or your custom path) for proper GDScript integration.
 
 ## Usage Guide
 
@@ -122,6 +124,76 @@ public class CombatLogger : ContextLogger
     }
 }
 ```
+
+### Using the plugin from GDScript
+
+Everything above works from GDScript too, through the `GodotLogger` facade. It is a
+`class_name` script, so there is nothing to preload and no extra autoload to configure.
+
+```gdscript
+GodotLogger.info("Player damaged", {"damage": 12, "enemy": "Slime"}, "Combat")
+GodotLogger.warning("Frame budget exceeded", {"fps": Engine.get_frames_per_second()}, "Perf")
+GodotLogger.error("Save failed", {"path": path}, "IO")
+```
+
+Entries land on the same channels, pass the same filters and reach the same writers,
+console, files, the in-game overlay and Seq, as entries logged from C#.
+
+> **This does not remove the .NET requirement.** The core of the plugin is C#, so your
+> project must still be a Godot .NET (Mono) build with the C# solution compiled. GDScript
+> support means you can *use* the logger from GDScript, not that it runs on standard Godot.
+
+#### Caller information
+
+The C# API picks up the calling file and line from compiler attributes, which GDScript has
+no equivalent for. The facade uses `get_stack()` instead, so entries carry the same caller
+information, only with one caveat: `get_stack()` returns nothing outside a debug session, so in
+release exports the caller fields are left blank rather than guessed at.
+
+#### Performance
+
+A GDScript log call is heavier than the C# one: it crosses the language boundary, allocates
+a `Dictionary`, and walks the stack. Two things to know:
+
+* `GodotLogger.debug(...)` **returns immediately in release builds.** C# strips `Debug()`
+  calls at compile time via `[Conditional("DEBUG")]`; GDScript cannot be stripped, so the
+  facade checks `OS.is_debug_build()` instead. Use `info()` for entries that must survive
+  into a release build.
+* For hot paths, gate on `is_enabled()` so the context dictionary is never built:
+
+```gdscript
+if GodotLogger.is_enabled(GodotLogger.Level.DEBUG, "Physics"):
+    GodotLogger.debug("Contacts", {"bodies": _collect_bodies()})
+```
+
+#### Console commands and watches
+
+```gdscript
+GodotLogger.register_command("give_gold", func(args):
+    if args.is_empty():
+        return "usage: give_gold <amount>"
+    Player.gold += int(args[0])
+    return "Gave %s gold." % args[0],
+    "Adds gold to the player", "give_gold <amount>")
+
+GodotLogger.watch("Player HP", func(): return _player.health)
+```
+
+The handler receives one `Array` of string arguments and returns the text to print.
+
+#### Full API
+
+| Function | Purpose |
+|---|---|
+| `debug` / `info` / `warning` / `error` `(message, context := {}, channel := "General")` | Log an entry |
+| `is_enabled(level, channel := "General")` | Level gate for hot paths |
+| `is_available()` | Whether the C# logger is reachable |
+| `get_min_level()` / `set_min_level(level)` | Read or change the minimum level at runtime |
+| `mute_channel` / `unmute_channel` / `is_channel_muted` | Channel control |
+| `register_command(name, handler, description := "", usage := "")` | Add an in-game console command |
+| `watch(label, provider)` / `unwatch(label)` | Add or remove a Watch panel row |
+
+A runnable example lives in `addons/godot_advanced_logger/examples/gdscript/`.
 
 ### Real-Time Analytics with Seq (Highly Recommended)
 
