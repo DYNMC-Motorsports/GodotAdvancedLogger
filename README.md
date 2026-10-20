@@ -32,15 +32,27 @@ Moving beyond standard `GD.Print` console outputs, this plugin introduces a stan
 
 ## Configuration
 
-Once enabled, you can configure the logger visually. 
-Go to **Project Settings -> General -> Addons -> Godot Advanced Logger**.
-Here you can:
-* Set the minimum Log Level for the Editor (e.g., Debug, Info).
-* Set a separate minimum Log Level for Release builds (e.g., Warning, Error).
-* Mute noisy channels.
-* Enable/Disable specific Writers (Console, File, JSON, Seq, In-Game UI).
-* Configure the In-Game UI toggle hotkey (defaults to `F12`).
-* **IMPORTANT:** If using GDScript, make sure the `_BRIDGE_SCRIPT` path is correctly set to `addons/godot_advanced_logger/core/GodotLogger.cs` (or your custom path) for proper GDScript integration.
+Once enabled, open **Project -> Tools -> Advanced Logger Settings...** (or search for
+*Advanced Logger* in the command palette, `Ctrl+Shift+P` / `Cmd+Shift+P`). The settings window groups
+everything into pages with inline explanations:
+
+| Page | What you set there |
+|---|---|
+| **Overview** | Nothing. It shows what the logger does in editor/debug builds vs. release exports side by side, and lists checks for risky or broken setups with one-click fixes. |
+| **Log Levels** | The minimum level for editor/debug builds and, separately, for release exports. The picker shows which levels survive. |
+| **Outputs** | Console, in-game overlay, text file, JSON Lines and Seq, each with a short explanation, the builds it runs in, and a button to open the log folder. |
+| **Seq** | Server URL with live validation, the API key, a **Test connection** button that sends a real test event, and a Docker quick start. |
+| **Channels** | Muted channels as removable chips. The window also scans your scripts and recent log files for the channels your project uses, so you can mute them with a switch. |
+| **In-Game Overlay** | The hotkey (click, then press the key), pause-while-open, and the release opt-in. |
+
+Changes are saved to `project.godot` automatically and apply the next time the game starts.
+The window is a front end for ordinary Project Settings: everything is still under
+**Project Settings -> General -> Addons -> Godot Advanced Logger**, and editing values there
+updates the window too.
+
+> **Using GDScript?** Nothing to configure. The `GodotLogger` facade preloads
+> `res://addons/godot_advanced_logger/gdscript/GodotLoggerBridge.gd` via its `_BRIDGE_SCRIPT`
+> constant; only adjust that path if you move the addon folder.
 
 ## Usage Guide
 
@@ -213,7 +225,7 @@ docker run \
   datalust/seq
 ```
 
-2. In Godot, go to **Project Settings -> Addons -> Godot Advanced Logger** and check **Enable Seq**.
+2. In Godot, open **Project -> Tools -> Advanced Logger Settings... -> Seq**, switch the output on and press **Test connection**.
 3. Run your game and open `http://localhost:5341` in your browser.
 4. Watch your logs stream in live. Use the search bar to query your game data instantly: 
    *(e.g., `Channel = 'Combat' and Damage > 50`)*
@@ -235,8 +247,9 @@ overlay with five built-in panels:
 
 Use **Wide** in the header to expand the overlay from the right 40% to the full viewport.
 
-The overlay is disabled in release exports unless you set `ingame_ui_allow_in_release`, and
-it can pause the game while open via `ingame_ui_pause_game`.
+The overlay is disabled in release exports unless you allow it on the **In-Game Overlay** page
+of the settings window (`ingame_ui_allow_in_release`), and it can pause the game while open
+(`ingame_ui_pause_game`).
 
 #### Watch a value
 

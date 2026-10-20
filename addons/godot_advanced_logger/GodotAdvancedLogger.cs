@@ -1,5 +1,8 @@
 #if TOOLS
+using System.Runtime.Loader;
 using Godot;
+using GodotAdvancedLogger.addons.godot_advanced_logger.core;
+using GodotAdvancedLogger.addons.godot_advanced_logger.editor;
 
 namespace GodotAdvancedLogger.addons.godot_advanced_logger;
 
@@ -11,22 +14,11 @@ public partial class GodotAdvancedLogger : EditorPlugin
 
     private const string AutoloadNameOverlay = "DebugScreen";
     private const string AutoloadPathOverlay = "res://addons/godot_advanced_logger/core/ui/DebugScreen.cs";
-    
-    private const string SettingMutedChannels = "addons/godot_advanced_logger/settings/muted_channels";
-    private const string SettingLogLevel = "addons/godot_advanced_logger/settings/min_log_level";
-    private const string SettingOverlayToggleHotkey = "addons/godot_advanced_logger/settings/ingame_ui_hotkey";
-    private const string SettingLogLevelRelease = "addons/godot_advanced_logger/settings/min_log_level_release";
-    private const string SettingOverlayPauseGame = "addons/godot_advanced_logger/settings/ingame_ui_pause_game";
-    private const string SettingOverlayAllowInRelease = "addons/godot_advanced_logger/settings/ingame_ui_allow_in_release";
-    
-    private const string SettingEnableOverlay = "addons/godot_advanced_logger/writers/enable_overlay";
-    private const string SettingEnableConsole = "addons/godot_advanced_logger/writers/enable_console";
-    private const string SettingEnableFile = "addons/godot_advanced_logger/writers/enable_file";
-    private const string SettingEnableJson = "addons/godot_advanced_logger/writers/enable_json";
-    private const string SettingEnableSeq = "addons/godot_advanced_logger/writers/enable_seq";
-    
-    private const string SettingSeqUrl = "addons/godot_advanced_logger/seq/server_url";
-    private const string SettingSeqApiKey = "addons/godot_advanced_logger/seq/api_key";
+
+    private const string ToolMenuLabel = "Advanced Logger Settings...";
+    private const string CommandKey = "godot_advanced_logger/open_settings";
+
+    private LoggerSettingsWindow _settingsWindow;
 
     public override void _EnterTree()
     {
@@ -37,58 +29,96 @@ public partial class GodotAdvancedLogger : EditorPlugin
         }
         AddAutoloadSingleton(AutoloadName, AutoloadPath);
         AddAutoloadSingleton(AutoloadNameOverlay, AutoloadPathOverlay);
-        
-        // Global Settings
-        AddCustomProjectSetting(SettingMutedChannels, "", Variant.Type.String, PropertyHint.None, "Comma separated list (e.g. Physics, AI)");
-        AddCustomProjectSetting(SettingOverlayToggleHotkey, "F12", Variant.Type.String);
-        AddCustomProjectSetting(SettingLogLevel, 0, Variant.Type.Int, PropertyHint.Enum, "Debug,Info,Warning,Error");
-        AddCustomProjectSetting(SettingLogLevelRelease, 1, Variant.Type.Int, PropertyHint.Enum, "Debug,Info,Warning,Error");
 
-        // Overlay behaviour
-        AddCustomProjectSetting(SettingOverlayPauseGame, false, Variant.Type.Bool, PropertyHint.None,
-            "Pause the SceneTree while the debug overlay is open");
-        AddCustomProjectSetting(SettingOverlayAllowInRelease, false, Variant.Type.Bool, PropertyHint.None,
-            "Allow the debug overlay to be opened in release exports");
-        
-        // Writer Toggles 
-        AddCustomProjectSetting(SettingEnableOverlay, true, Variant.Type.Bool);
-        AddCustomProjectSetting(SettingEnableConsole, true, Variant.Type.Bool);
-        AddCustomProjectSetting(SettingEnableFile, false, Variant.Type.Bool);
-        AddCustomProjectSetting(SettingEnableJson, false, Variant.Type.Bool);
-        AddCustomProjectSetting(SettingEnableSeq, false, Variant.Type.Bool);
-        
-        // Seq Config
-        AddCustomProjectSetting(SettingSeqUrl, "http://localhost:5341", Variant.Type.String);
-        AddCustomProjectSetting(SettingSeqApiKey, "", Variant.Type.String, PropertyHint.Password, "Optional");
-        
+        foreach (var setting in LoggerSettings.All)
+        {
+            RegisterProjectSetting(setting);
+        }
+
         ProjectSettings.Save();
+
+        // Rebuilding the C# project unloads this assembly while the editor keeps running.
+        var loadContext = AssemblyLoadContext.GetLoadContext(typeof(GodotAdvancedLogger).Assembly);
+        if (loadContext != null) loadContext.Unloading += OnAssemblyUnloading;
+
+        AddToolMenuItem(ToolMenuLabel, Callable.From(OpenSettingsWindow));
+        EditorInterface.Singleton.GetCommandPalette()
+            .AddCommand("Open Advanced Logger Settings", CommandKey, Callable.From(OpenSettingsWindow));
+
         GD.Print($"{AutoloadName} loaded and settings registered.");
     }
 
     public override void _ExitTree()
     {
+        var loadContext = AssemblyLoadContext.GetLoadContext(typeof(GodotAdvancedLogger).Assembly);
+        if (loadContext != null) loadContext.Unloading -= OnAssemblyUnloading;
+
+        RemoveToolMenuItem(ToolMenuLabel);
+        EditorInterface.Singleton.GetCommandPalette()?.RemoveCommand(CommandKey);
+
+        // Free the window before the C# assembly is unloaded (plugin disabled or project rebuilt),
+        // otherwise Godot keeps a node whose script no longer exists.
+        if (IsInstanceValid(_settingsWindow))
+        {
+            _settingsWindow.QueueFree();
+        }
+        _settingsWindow = null;
+
         RemoveAutoloadSingleton(AutoloadName);
         RemoveAutoloadSingleton(AutoloadNameOverlay);
         GD.Print($"{AutoloadName} unloaded.");
     }
-    
-    private void AddCustomProjectSetting(string name, Variant defaultValue, Variant.Type type, PropertyHint hint = PropertyHint.None, string hintString = "")
+
+    /// <summary>Opens the settings window, creating it on first use.</summary>
+    public void OpenSettingsWindow()
     {
-        if (!ProjectSettings.HasSetting(name))
+        // After an assembly reload Godot restores the window node, but not its managed
+        // state (pages, store). Such a husk is replaced rather than shown.
+        if (IsInstanceValid(_settingsWindow) && !_settingsWindow.IsBuilt)
         {
-            ProjectSettings.SetSetting(name, defaultValue);
+            _settingsWindow.QueueFree();
+            _settingsWindow = null;
         }
-        
+
+        if (!IsInstanceValid(_settingsWindow))
+        {
+            _settingsWindow = new LoggerSettingsWindow();
+            EditorInterface.Singleton.GetBaseControl().AddChild(_settingsWindow);
+        }
+
+        _settingsWindow.Open();
+    }
+
+    private void OnAssemblyUnloading(AssemblyLoadContext context)
+    {
+        // Write pending edits before the managed state is thrown away. The window removes
+        // itself after the reload (see LoggerSettingsWindow._Process).
+        if (IsInstanceValid(_settingsWindow))
+        {
+            _settingsWindow.ReleaseManagedResources();
+        }
+    }
+
+    private static void RegisterProjectSetting(SettingDefinition setting)
+    {
+        if (!ProjectSettings.HasSetting(setting.Path))
+        {
+            ProjectSettings.SetSetting(setting.Path, setting.DefaultVariant);
+        }
+
         var propertyInfo = new Godot.Collections.Dictionary
         {
-            { "name", name },
-            { "type", (int)type },
-            { "hint", (int)hint },
-            { "hint_string", hintString }
+            { "name", setting.Path },
+            { "type", (int)setting.Type },
+            { "hint", (int)setting.Hint },
+            { "hint_string", setting.HintString }
         };
 
         ProjectSettings.AddPropertyInfo(propertyInfo);
-        ProjectSettings.SetInitialValue(name, defaultValue);
+        ProjectSettings.SetInitialValue(setting.Path, setting.DefaultVariant);
+
+        // Without this the settings only appear once "Advanced Settings" is toggled on.
+        ProjectSettings.SetAsBasic(setting.Path, true);
     }
 }
 #endif

@@ -32,10 +32,6 @@ public partial class LogManager : Node
 
     private LogLevel _minLogLevel = LogLevel.Debug;
 
-    private const string SettingMutedChannels = "addons/godot_advanced_logger/settings/muted_channels";
-    private const string SettingLogLevel = "addons/godot_advanced_logger/settings/min_log_level";
-    private const string SettingLogLevelRelease = "addons/godot_advanced_logger/settings/min_log_level_release";
-
     public bool IsGlobalEnabled { get; set; } = true;
 
     public override void _EnterTree()
@@ -53,49 +49,45 @@ public partial class LogManager : Node
 
     private void InitializeWriters()
     {
-        bool GetBoolSetting(string path, bool def) =>
-            ProjectSettings.HasSetting(path) ? ProjectSettings.GetSetting(path).AsBool() : def;
-
         bool isDebugBuild = OS.IsDebugBuild();
 
-        if (GetBoolSetting("addons/godot_advanced_logger/writers/enable_console", true))
+        if (LoggerSettings.GetBool(LoggerSettings.EnableConsole))
         {
             AddWriter(new writers.ConsoleWriter());
         }
 
-        if (GetBoolSetting("addons/godot_advanced_logger/writers/enable_file", false))
+        if (LoggerSettings.GetBool(LoggerSettings.EnableFile))
         {
             AddWriter(new writers.FileWriter());
         }
 
-        if (GetBoolSetting("addons/godot_advanced_logger/writers/enable_json", false))
+        if (LoggerSettings.GetBool(LoggerSettings.EnableJson))
         {
             AddWriter(new writers.JsonFileWriter());
         }
 
-        if (isDebugBuild)
+        // Seq is a developer tool that phones home over the network: debug builds only.
+        if (isDebugBuild && LoggerSettings.GetBool(LoggerSettings.EnableSeq))
         {
-            if (GetBoolSetting("addons/godot_advanced_logger/writers/enable_seq", false))
-            {
-                string seqUrl = ProjectSettings.HasSetting("addons/godot_advanced_logger/seq/server_url")
-                    ? ProjectSettings.GetSetting("addons/godot_advanced_logger/seq/server_url").AsString()
-                    : "http://localhost:5341";
-
-                string seqKey = ProjectSettings.HasSetting("addons/godot_advanced_logger/seq/api_key")
-                    ? ProjectSettings.GetSetting("addons/godot_advanced_logger/seq/api_key").AsString()
-                    : null;
-
-                AddWriter(new writers.SeqHttpWriter(seqUrl, seqKey));
-            }
-
-            if (GetBoolSetting("addons/godot_advanced_logger/writers/enable_overlay", true))
-            {
-                AddWriter(new writers.DebugScreenWriter());
-            }
+            AddWriter(new writers.SeqHttpWriter(
+                LoggerSettings.GetString(LoggerSettings.SeqServerUrl),
+                LoggerSettings.GetString(LoggerSettings.SeqApiKey)));
         }
-        else
+
+        // The overlay follows the same gate as DebugScreen itself, so a release build that
+        // opts into the overlay also gets entries in its Logs tab.
+        bool overlayAvailable = isDebugBuild || LoggerSettings.GetBool(LoggerSettings.OverlayAllowInRelease);
+
+        if (overlayAvailable && LoggerSettings.GetBool(LoggerSettings.EnableOverlay))
         {
-            GD.Print("[GodotAdvancedLogger] Release Build detected. Dev-Tools (Seq, InGameUI) are hard-disabled.");
+            AddWriter(new writers.DebugScreenWriter());
+        }
+
+        if (!isDebugBuild)
+        {
+            GD.Print(overlayAvailable
+                ? "[GodotAdvancedLogger] Release build detected. Seq is hard-disabled; the in-game overlay is enabled by project setting."
+                : "[GodotAdvancedLogger] Release build detected. Dev-Tools (Seq, InGameUI) are hard-disabled.");
         }
     }
 
@@ -103,37 +95,21 @@ public partial class LogManager : Node
     {
         bool isDebug = OS.IsDebugBuild();
 
-        string activeSettingPath = isDebug ? SettingLogLevel : SettingLogLevelRelease;
-
-        if (!ProjectSettings.HasSetting(activeSettingPath))
+        foreach (var channel in LoggerSettings.GetMutedChannels())
         {
-            activeSettingPath = SettingLogLevel;
+            MuteChannel(channel);
         }
 
-        if (ProjectSettings.HasSetting(SettingMutedChannels))
+        if (_mutedChannels.Count > 0)
         {
-            string rawString = ProjectSettings.GetSetting(SettingMutedChannels).AsString();
-            if (!string.IsNullOrWhiteSpace(rawString))
-            {
-                var channels = rawString.Split(',');
-                foreach (var channel in channels)
-                {
-                    MuteChannel(channel.Trim());
-                }
-                GD.Print($"[LogManager] Loaded muted channels: {string.Join(", ", _mutedChannels)}");
-            }
+            GD.Print($"[LogManager] Loaded muted channels: {string.Join(", ", _mutedChannels)}");
         }
 
-        if (ProjectSettings.HasSetting(activeSettingPath))
-        {
-            int levelInt = ProjectSettings.GetSetting(activeSettingPath).AsInt32();
-            if (Enum.IsDefined(typeof(LogLevel), levelInt))
-            {
-                _minLogLevel = (LogLevel)levelInt;
+        // Falls back to the schema default when the setting is absent, which is the normal
+        // case in exports: Godot does not write default values into project.godot.
+        _minLogLevel = LoggerSettings.GetMinLogLevel(isDebug);
 
-                GD.Print($"[LogManager] Configured for {(isDebug ? "Debug" : "Release")}. Min Level: {_minLogLevel}");
-            }
-        }
+        GD.Print($"[LogManager] Configured for {(isDebug ? "Debug" : "Release")}. Min Level: {_minLogLevel}");
     }
 
     public override void _ExitTree()

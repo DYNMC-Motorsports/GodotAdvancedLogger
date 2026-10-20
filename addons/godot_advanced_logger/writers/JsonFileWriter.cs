@@ -37,7 +37,7 @@ public class JsonFileWriter : ILogWriter
     /// <param name="maxFiles">How many log files to keep before the oldest are deleted.</param>
     public JsonFileWriter(int maxFiles = 50)
     {
-        _logDirectory = ProjectSettings.GlobalizePath("user://logs/godotadvancedlogger");
+        _logDirectory = ProjectSettings.GlobalizePath(core.LoggerSettings.LogDirectory);
         _maxFiles = maxFiles;
     }
 

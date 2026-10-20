@@ -28,7 +28,9 @@ plugin, and you can add your own.
 
 ## Project settings
 
-Under **Project Settings → General → Addons → Godot Advanced Logger → Settings**:
+Open **Project → Tools → Advanced Logger Settings... → In-Game Overlay**. The hotkey is set by
+clicking the button and pressing the key. The same values live under
+**Project Settings → General → Addons → Godot Advanced Logger → Settings**:
 
 | Setting                      | Default | Effect                                             |
 |------------------------------|---------|----------------------------------------------------|
@@ -54,10 +56,10 @@ text field, otherwise you could never type that letter.
 ### Release builds
 
 The overlay is a developer tool, so it is disabled in release exports unless you set
-`ingame_ui_allow_in_release`. This matches how `LogManager` gates Seq and the overlay
-writer. Note these are two separate switches: `writers/enable_overlay` controls whether logs
-are *routed* to the overlay, `ingame_ui_allow_in_release` controls whether the overlay
-*exists* at all in a release build.
+`ingame_ui_allow_in_release`. Note these are two separate switches: `writers/enable_overlay`
+controls whether logs are *routed* to the overlay's Logs tab, `ingame_ui_allow_in_release`
+controls whether the overlay *exists* at all in a release build. When the overlay is allowed
+in release, `LogManager` routes logs to it there as well, so the Logs tab is not empty.
 
 ## The Logs panel
 

@@ -55,11 +55,11 @@ public class SeqHttpWriter : ILogWriter
     /// <summary>
     /// Initializes a SeqHttpWriter
     /// </summary>
-    /// <param name="serverUrl">Base URL of the Seq-Server</param>
+    /// <param name="serverUrl">Base URL of the Seq-Server. A pasted ingestion path (<c>/api/events/raw</c>) is stripped.</param>
     /// <param name="apiKey">Optional: API Key used for authentication</param>
-    public SeqHttpWriter(string serverUrl = "http://localhost:5341", string apiKey = null)
+    public SeqHttpWriter(string serverUrl = core.SeqEndpoint.DefaultBaseUrl, string apiKey = null)
     {
-        _serverUrl = (serverUrl ?? "http://localhost:5341").TrimEnd('/');
+        _serverUrl = core.SeqEndpoint.Normalize(serverUrl);
         _apiKey = apiKey;
     }
 
@@ -217,7 +217,7 @@ public class SeqHttpWriter : ILogWriter
                 content.Headers.Add("X-Seq-ApiKey", _apiKey);
             }
 
-            using var response = await HttpClient.PostAsync($"{_serverUrl}/api/events/raw", content, token);
+            using var response = await HttpClient.PostAsync(_serverUrl + core.SeqEndpoint.IngestPath, content, token);
 
             if (response.IsSuccessStatusCode) return true;
             
@@ -225,11 +225,12 @@ public class SeqHttpWriter : ILogWriter
             {
                 string body = await response.Content.ReadAsStringAsync(token);
                 GD.PrintErr($"[SeqHttpWriter] Server rejected {batch.Count} entries with {(int)response.StatusCode} " +
-                            $"{(int)response.StatusCode}: {body}. Discarding this batch.");
+                            $"({response.ReasonPhrase}): {body}. Discarding this batch.");
 
                 if (response.StatusCode == HttpStatusCode.Unauthorized || response.StatusCode == HttpStatusCode.Forbidden)
                 {
-                    GD.PrintErr("[SeqHttpWriter] Check 'Project Settings -> Addons -> Godot Advanced Logger -> Seq -> Api Key'.");
+                    GD.PrintErr("[SeqHttpWriter] Check the API key under 'Project -> Tools -> Advanced Logger Settings... -> Seq', " +
+                               "and use 'Test connection' there to verify it.");
                 }
 
                 return true;

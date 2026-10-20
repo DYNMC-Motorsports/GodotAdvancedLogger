@@ -19,10 +19,6 @@ public partial class DebugScreen : CanvasLayer
 {
     public static DebugScreen Instance { get; private set; }
 
-    private const string SettingHotkeyPath = "addons/godot_advanced_logger/settings/ingame_ui_hotkey";
-    private const string SettingPauseWhileOpen = "addons/godot_advanced_logger/settings/ingame_ui_pause_game";
-    private const string SettingAllowInRelease = "addons/godot_advanced_logger/settings/ingame_ui_allow_in_release";
-
     /// <summary>
     /// Upper bound on entries moved into the UI per frame. A burst of logs (a loop that
     /// logs every iteration, an exception storm) would otherwise be drained in a single
@@ -98,7 +94,7 @@ public partial class DebugScreen : CanvasLayer
         if (!_uiEnabled)
         {
             GD.Print("[DebugScreen] Release build: overlay disabled. Enable it with " +
-                     "'Project Settings -> Addons -> Godot Advanced Logger -> Settings -> Ingame Ui Allow In Release'.");
+                     "'Project -> Tools -> Advanced Logger Settings... -> In-Game Overlay -> Allow in release exports'.");
             return;
         }
 
@@ -113,26 +109,20 @@ public partial class DebugScreen : CanvasLayer
 
     private void LoadSettings()
     {
-        bool GetBool(string path, bool def) =>
-            ProjectSettings.HasSetting(path) ? ProjectSettings.GetSetting(path).AsBool() : def;
-
         // The overlay is a developer tool. It stays out of release exports unless the
         // project explicitly opts in - matching how LogManager gates its dev-only writers.
-        _uiEnabled = OS.IsDebugBuild() || GetBool(SettingAllowInRelease, false);
-        _pauseWhileOpen = GetBool(SettingPauseWhileOpen, false);
+        _uiEnabled = OS.IsDebugBuild() || LoggerSettings.GetBool(LoggerSettings.OverlayAllowInRelease);
+        _pauseWhileOpen = LoggerSettings.GetBool(LoggerSettings.OverlayPauseGame);
 
-        if (!ProjectSettings.HasSetting(SettingHotkeyPath)) return;
+        _toggleHotkey = LoggerSettings.GetOverlayHotkey(out bool parsed);
 
-        string hotkeyStr = ProjectSettings.GetSetting(SettingHotkeyPath).AsString();
-
-        if (Enum.TryParse(typeof(Key), hotkeyStr, true, out var result))
+        if (parsed)
         {
-            _toggleHotkey = (Key)result;
-            _logger.Debug($"Using custom hotkey: {_toggleHotkey}");
+            _logger.Debug($"Using hotkey: {_toggleHotkey}");
         }
         else
         {
-            _logger.Warning($"Could not parse hotkey '{hotkeyStr}'. Falling back to F12.");
+            _logger.Warning($"Could not parse hotkey '{LoggerSettings.GetString(LoggerSettings.OverlayHotkey)}'. Falling back to F12.");
         }
     }
 
